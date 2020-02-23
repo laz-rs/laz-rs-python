@@ -1,0 +1,17 @@
+[package]
+name = "laz-rs-python"
+version = "0.1.0"
+authors = ["tmontaigu <thomas.montaigu@laposte.net>"]
+edition = "2018"
+
+[lib]
+name = "pylaz"
+crate-type = ["cdylib"]
+
+[dependencies]
+numpy = "0.7.0"
+laz = { path = "../laz-rs", features = ["parallel"] }
+
+[dependencies.pyo3]
+version = "0.8.5"
+features = ["extension-module"]
