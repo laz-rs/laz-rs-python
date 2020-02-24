@@ -1,3 +1,7 @@
+name: Building
+
+on: [push]
+
 jobs:
   maturin-build:
     runs-on: ${{ matrix.os }}
