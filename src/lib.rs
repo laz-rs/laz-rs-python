@@ -66,21 +66,16 @@ fn decompress_points(
     let vlr_data = laszip_vlr_record_data.as_slice()?;
     let data_slc = compressed_points_data.as_slice()?;
     let output = decompression_output.as_slice_mut()?;
-    if !parallel {
-        let data_source = std::io::Cursor::new(data_slc);
 
-        laz::LazVlr::from_buffer(vlr_data)
-            .and_then(|vlr| laz::LasZipDecompressor::new(data_source, vlr))
-            .and_then(|mut decompressor| {
-                decompressor.decompress_many(output)?;
-                Ok(())
-            })
-            .map_err(|e| PyErr::new::<PyLazError, String>(format!("{}", e)))?;
-    } else {
-        laz::LazVlr::from_buffer(vlr_data)
-            .and_then(|vlr| laz::las::laszip::par_decompress_buffer(data_slc, output, &vlr))
-            .map_err(|e| PyErr::new::<PyLazError, String>(format!("{}", e)))?;
-    }
+    laz::LazVlr::from_buffer(vlr_data)
+        .and_then(|vlr| {
+            if parallel {
+                laz::decompress_buffer(data_slc, output, vlr)
+            } else {
+                laz::par_decompress_buffer(data_slc, output, &vlr)
+            }
+        })
+        .map_err(|e| PyErr::new::<PyLazError, String>(format!("{}", e)))?;
     Ok(())
 }
 
@@ -92,14 +87,14 @@ fn compress_points(
 ) -> PyResult<Py<numpy::PyArray1<u8>>> {
     let mut compression_result = std::io::Cursor::new(Vec::<u8>::new());
     if !parallel {
-        laz::las::laszip::compress_all(
+        laz::compress_buffer(
             &mut compression_result,
             uncompressed_points.as_slice()?,
             laszip_vlr.vlr.clone(),
         )
         .map_err(|e| PyErr::new::<PyLazError, String>(format!("{}", e)))?;
     } else {
-        laz::las::laszip::par_compress_all(
+        laz::par_compress_buffer(
             &mut compression_result,
             uncompressed_points.as_slice()?,
             &laszip_vlr.vlr,
