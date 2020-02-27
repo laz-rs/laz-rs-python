@@ -11,17 +11,26 @@ jobs:
         python-version: [3.5, 3.6, 3.7]
     steps:
       - uses: actions/checkout@v1
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v1
         with:
           python-version: ${{ matrix.python-version }}
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install maturin
+
       - name: Install Rust nightly
         run: |
           rustup toolchain install nightly
           rustup default nightly
-      - name: Do the work mate
+
+      - name: Build
         run: maturin build
+
+      - name: Publish to PyPi
+        if: github.event_name == 'release' && github.event.action == 'created'
+        run: maturin publish -u ${{ secrets.PYPI_USERNAME }} -p ${{ secrets.PYPI_PASSWD }} -r https://test.pypi.org/legacy/
+
