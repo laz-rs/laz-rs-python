@@ -36,5 +36,5 @@ jobs:
 
       - name: Publish to PyPi
         if: github.event_name == 'release' && github.event.action == 'created'
-        run: maturin publish -u ${{ secrets.PYPI_USERNAME }} -p ${{ secrets.PYPI_PASSWD }} -r https://test.pypi.org/legacy/
+        run: maturin publish -u ${{ secrets.PYPI_USERNAME }} -p ${{ secrets.PYPI_PASSWD }}
 
