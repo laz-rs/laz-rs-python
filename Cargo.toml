@@ -13,7 +13,10 @@ crate-type = ["cdylib"]
 
 [dependencies]
 numpy = "0.7.0"
-laz = { git = "https://github.com/tmontaigu/laz-rs", features = ["parallel"] }
+
+[dependencies.laz]
+version = "0.3.0"
+features = ["parallel"]
 
 [dependencies.pyo3]
 version = "0.8.5"
