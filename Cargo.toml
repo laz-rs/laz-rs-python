@@ -1,8 +1,11 @@
 [package]
-name = "laz-rs-python"
+name = "pylaz"
 version = "0.1.0"
 authors = ["tmontaigu <thomas.montaigu@laposte.net>"]
 edition = "2018"
+license = "MIT"
+description = "Python bindings for laz-rs"
+readme = "README.md"
 
 [lib]
 name = "pylaz"
@@ -15,3 +18,11 @@ laz = { git = "https://github.com/tmontaigu/laz-rs", features = ["parallel"] }
 [dependencies.pyo3]
 version = "0.8.5"
 features = ["extension-module"]
+
+[package.metadata.maturin]
+classifier = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python",
+    "Programming Language :: Rust",
+]
