@@ -1,6 +1,10 @@
 name: Building
 
-on: [push]
+on:
+  release:
+    types: [created]
+  push:
+
 
 jobs:
   maturin-build:
