@@ -38,5 +38,5 @@ jobs:
         if: github.event_name == 'release' && github.event.action == 'created'
         env:
           MATURIN_PASSWORD: ${{ secrets.PYPI_PASSWD }}
-        run: maturin publish -u tmontaigu
+        run: maturin publish --username tmontaigu
 
