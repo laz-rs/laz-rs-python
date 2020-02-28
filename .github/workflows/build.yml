@@ -37,6 +37,6 @@ jobs:
       - name: Publish to PyPi
         if: github.event_name == 'release' && github.event.action == 'created'
         env:
-          MATURIN_PASSWORD: ${{ secrets.PYPI_PASSWD }}
+          MATURIN_PASSWORD: ${{ secrets.PYPI }}
         run: maturin publish --username __token__
 
