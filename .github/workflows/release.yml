@@ -33,7 +33,13 @@ jobs:
           override: true
 
       - name: Publish to PyPi
+        if:  matrix.os == 'windows-latest'
+        run: |
+          maturin build --release --interpreter python${{ matrix.python-version }}
+          twine upload -u __token__ -p ${{ secrets.PYPI }} target\wheels\lazrs*.whl
+
+      - name: Publish to PyPi
+        if:  matrix.os != 'windows-latest'
         run: |
           maturin build --release --interpreter python${{ matrix.python-version }}
           twine upload -u __token__ -p ${{ secrets.PYPI }} target/wheels/lazrs*.whl
-
