@@ -31,5 +31,5 @@ jobs:
           override: true
 
       - name: Build
-        run: maturin build
+        run: maturin build --release
 
