@@ -69,7 +69,7 @@ fn decompress_points(
 
     laz::LazVlr::from_buffer(vlr_data)
         .and_then(|vlr| {
-            if parallel {
+            if !parallel {
                 laz::decompress_buffer(data_slc, output, vlr)
             } else {
                 laz::par_decompress_buffer(data_slc, output, &vlr)
