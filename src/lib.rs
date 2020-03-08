@@ -2,7 +2,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyType;
 use pyo3::{create_exception, wrap_pyfunction};
 
-create_exception!(pylaz, PyLazError, pyo3::exceptions::RuntimeError);
+create_exception!(pylaz, LazrsError, pyo3::exceptions::RuntimeError);
 
 #[pyclass]
 struct LazVlr {
@@ -15,7 +15,7 @@ impl LazVlr {
     fn new(obj: &PyRawObject, record_data: &numpy::PyArray1<u8>) -> PyResult<()> {
         let vlr_data = record_data.as_slice()?;
         let vlr = laz::LazVlr::from_buffer(vlr_data)
-            .map_err(|e| PyErr::new::<PyLazError, String>(format!("{}", e)))?;
+            .map_err(|e| PyErr::new::<LazrsError, String>(format!("{}", e)))?;
         obj.init(LazVlr { vlr });
         Ok(())
     }
@@ -30,7 +30,7 @@ impl LazVlr {
             point_format_id,
             num_extra_bytes,
         )
-        .map_err(|e| PyErr::new::<PyLazError, String>(format!("{}", e)))?;
+        .map_err(|e| PyErr::new::<LazrsError, String>(format!("{}", e)))?;
         let vlr = laz::LazVlr::from_laz_items(items);
         Ok(LazVlr { vlr })
     }
@@ -48,7 +48,7 @@ impl LazVlr {
         let mut data = std::io::Cursor::new(Vec::<u8>::new());
         self.vlr
             .write_to(&mut data)
-            .map_err(|e| PyErr::new::<PyLazError, String>(format!("{}", e)))?;
+            .map_err(|e| PyErr::new::<LazrsError, String>(format!("{}", e)))?;
 
         let gil = pyo3::Python::acquire_gil();
         let np_array = numpy::PyArray1::<u8>::from_slice(gil.python(), data.get_ref().as_slice());
@@ -75,7 +75,7 @@ fn decompress_points(
                 laz::par_decompress_buffer(data_slc, output, &vlr)
             }
         })
-        .map_err(|e| PyErr::new::<PyLazError, String>(format!("{}", e)))?;
+        .map_err(|e| PyErr::new::<LazrsError, String>(format!("{}", e)))?;
     Ok(())
 }
 
@@ -92,14 +92,14 @@ fn compress_points(
             uncompressed_points.as_slice()?,
             laszip_vlr.vlr.clone(),
         )
-        .map_err(|e| PyErr::new::<PyLazError, String>(format!("{}", e)))?;
+        .map_err(|e| PyErr::new::<LazrsError, String>(format!("{}", e)))?;
     } else {
         laz::par_compress_buffer(
             &mut compression_result,
             uncompressed_points.as_slice()?,
             &laszip_vlr.vlr,
         )
-        .map_err(|e| PyErr::new::<PyLazError, String>(format!("{}", e)))?;
+        .map_err(|e| PyErr::new::<LazrsError, String>(format!("{}", e)))?;
     }
     let gil = pyo3::Python::acquire_gil();
     let np_array =
@@ -109,10 +109,10 @@ fn compress_points(
 
 /// This module is a python module implemented in Rust.
 #[pymodule]
-fn pylaz(py: Python, m: &PyModule) -> PyResult<()> {
+fn lazrs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_wrapped(wrap_pyfunction!(decompress_points))?;
     m.add_wrapped(wrap_pyfunction!(compress_points))?;
-    m.add("PyLazError", py.get_type::<PyLazError>())?;
+    m.add("LazrsError", py.get_type::<LazrsError>())?;
     m.add_class::<LazVlr>()?;
     Ok(())
 }

@@ -8,7 +8,7 @@ description = "Python bindings for laz-rs"
 readme = "README.md"
 
 [lib]
-name = "pylaz"
+name = "lazrs"
 crate-type = ["cdylib"]
 
 [dependencies]
