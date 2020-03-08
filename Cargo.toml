@@ -1,5 +1,5 @@
 [package]
-name = "pylaz"
+name = "lazrs"
 version = "0.1.0"
 authors = ["tmontaigu <thomas.montaigu@laposte.net>"]
 edition = "2018"
