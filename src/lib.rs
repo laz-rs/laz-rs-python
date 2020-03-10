@@ -2,7 +2,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyType;
 use pyo3::{create_exception, wrap_pyfunction};
 
-create_exception!(pylaz, LazrsError, pyo3::exceptions::RuntimeError);
+create_exception!(lazrs, LazrsError, pyo3::exceptions::RuntimeError);
 
 #[pyclass]
 struct LazVlr {
