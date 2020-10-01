@@ -124,30 +124,12 @@ impl std::io::Seek for PyReadableFileObject {
         let new_pos = self
             .seek_fn
             .call(py, args, None)
-            .unwrap()
+            .expect("Failed to call seek")
             .cast_as::<pyo3::types::PyLong>(py)
-            .unwrap()
+            .expect("Failed to cast to pylong")
             .extract()
-            .unwrap();
+            .expect("Failed to cast to u64zz");
         Ok(new_pos)
     }
 }
 
-struct WriteWrapperNumpyArray(numpy::array::PyArray1<u8>);
-
-impl std::io::Write for WriteWrapperNumpyArray {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.0
-            .resize(self.0.len() + buf.len())
-            .expect("Failed to resize numpy array");
-        self.0.as_slice_mut().expect("Array is not contiguous")
-            [self.0.len()..self.0.len() + buf.len()]
-            .copy_from_slice(buf);
-
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
