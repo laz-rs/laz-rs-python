@@ -1,5 +1,5 @@
 use pyo3::prelude::*;
-use pyo3::types::{PyAny, PyType};
+use pyo3::types::{PyAny, PyType, PyBytes};
 use pyo3::{create_exception, wrap_pyfunction};
 
 use crate::adapters::{PyReadableFileObject, PyWriteableFileObject};
@@ -11,7 +11,6 @@ create_exception!(pylaz, LazrsError, pyo3::exceptions::RuntimeError);
 fn as_bytes<'a>(py: pyo3::Python, object: &'a pyo3::types::PyAny) -> PyResult<&'a [u8]> {
     let buffer = pyo3::buffer::PyBuffer::get(py, object)?;
 
-    assert_eq!(buffer.item_size(), std::mem::size_of::<u8>()); // is this truly mandatory ?
 
     let slc =
         unsafe { std::slice::from_raw_parts(buffer.buf_ptr() as *const u8, buffer.len_bytes()) };
@@ -28,7 +27,6 @@ fn as_mut_bytes<'a>(py: pyo3::Python, object: &'a pyo3::types::PyAny) -> PyResul
         ));
     }
 
-    assert_eq!(buffer.item_size(), std::mem::size_of::<u8>()); // is this truly mandatory ?
     let slc =
         unsafe { std::slice::from_raw_parts_mut(buffer.buf_ptr() as *mut u8, buffer.len_bytes()) };
 
@@ -77,15 +75,17 @@ impl LazVlr {
         self.vlr.items_size()
     }
 
-    fn record_data(&self) -> PyResult<Py<numpy::PyArray1<u8>>> {
+    fn record_data(&self) -> PyResult<PyObject> {
         let mut data = std::io::Cursor::new(Vec::<u8>::new());
         self.vlr
             .write_to(&mut data)
             .map_err(|e| PyErr::new::<LazrsError, String>(format!("{}", e)))?;
 
-        let gil = pyo3::Python::acquire_gil();
-        let np_array = numpy::PyArray1::<u8>::from_slice(gil.python(), data.get_ref().as_slice());
-        Ok(np_array.to_owned())
+        let gil = Python::acquire_gil();
+        let py = gil.python();
+        let bytes = PyBytes::new(py, data.get_ref())
+            .to_object(py);
+        Ok(bytes)
     }
 }
 
@@ -142,7 +142,7 @@ impl ParLasZipDecompressor {
                 PyReadableFileObject::new(gil.python(), source)?,
                 vlr,
             )
-            .unwrap(),
+            .map_err(into_py_err)?,
         });
         Ok(())
     }
@@ -167,16 +167,13 @@ impl LasZipDecompressor {
     #[new]
     pub fn new(
         obj: &PyRawObject,
-        record_data: pyo3::PyObject,
         source: pyo3::PyObject,
+        record_data: &pyo3::types::PyAny,
     ) -> PyResult<()> {
         let gil = Python::acquire_gil();
         let py = gil.python();
         let vlr = laz::LazVlr::from_buffer(
-            record_data
-                .cast_as::<pyo3::types::PyBytes>(py)
-                .expect("Object is not byte object")
-                .as_bytes(),
+            as_bytes(py, record_data)?
         )
         .map_err(into_py_err)?;
         let source = PyReadableFileObject::new(py, source)?;
@@ -186,11 +183,22 @@ impl LasZipDecompressor {
         Ok(())
     }
 
-    pub fn decompress_many(&mut self, dest: &mut numpy::PyArray1<u8>) -> PyResult<()> {
-        let slc = dest.as_slice_mut()?;
+    pub fn decompress_many(&mut self, dest: &mut pyo3::types::PyAny) -> PyResult<()> {
+        let slc = as_mut_bytes(pyo3::Python::acquire_gil().python(), dest)?;
         self.decompressor
             .decompress_many(slc)
             .map_err(|e| PyErr::new::<LazrsError, String>(format!("{}", e)))
+    }
+
+    pub fn  seek(&mut self, point_idx: u64) -> PyResult<()> {
+        self.decompressor.seek(point_idx)
+            .map_err(into_py_err)
+    }
+
+    pub fn vlr(&self) -> LazVlr {
+        return LazVlr {
+            vlr: self.decompressor.vlr().clone()
+        }
     }
 }
 
@@ -205,7 +213,7 @@ impl LasZipCompressor {
     pub fn new(obj: &PyRawObject, dest: pyo3::PyObject, vlr: &LazVlr) -> PyResult<()> {
         let dest = PyWriteableFileObject::new(dest)?;
         obj.init(Self {
-            compressor: laz::LasZipCompressor::from_laz_vlr(dest, vlr.vlr.clone())
+            compressor: laz::LasZipCompressor::new(dest, vlr.vlr.clone())
                 .map_err(into_py_err)?,
         });
         Ok(())
@@ -217,6 +225,10 @@ impl LasZipCompressor {
         self.compressor
             .compress_many(as_bytes(py, points)?)
             .map_err(into_py_err)
+    }
+
+    pub fn done(&mut self) -> PyResult<()> {
+        self.compressor.done().map_err(into_py_err)
     }
 }
 
@@ -249,7 +261,7 @@ fn compress_points(
     laszip_vlr: &LazVlr,
     uncompressed_points: &PyAny,
     parallel: bool,
-) -> PyResult<Py<numpy::PyArray1<u8>>> {
+) -> PyResult<PyObject> {
     let mut compression_result = std::io::Cursor::new(Vec::<u8>::new());
     if !parallel {
         laz::compress_buffer(
@@ -266,10 +278,11 @@ fn compress_points(
         )
         .map_err(|e| PyErr::new::<LazrsError, String>(format!("{}", e)))?;
     }
-    let gil = pyo3::Python::acquire_gil();
-    let np_array =
-        numpy::PyArray1::<u8>::from_slice(gil.python(), compression_result.get_ref().as_slice());
-    Ok(np_array.to_owned())
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+    let bytes = PyBytes::new(py, compression_result.get_ref())
+        .to_object(py);
+    Ok(bytes)
 }
 
 #[pyfunction]
@@ -288,15 +301,25 @@ fn read_chunk_table(source: pyo3::PyObject) -> pyo3::PyResult<pyo3::PyObject> {
     }
 }
 
+#[pyfunction]
+fn write_chunk_table(dest: pyo3::PyObject, chunk_table: Vec<usize>) -> pyo3::PyResult<()> {
+    let mut dest = PyWriteableFileObject::new(dest)?;
+
+    laz::write_chunk_table(&mut dest, &chunk_table)
+        .map_err(into_py_err)
+}
+
 /// This module is a python module implemented in Rust.
 #[pymodule]
 fn lazrs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_wrapped(wrap_pyfunction!(decompress_points))?;
     m.add_wrapped(wrap_pyfunction!(compress_points))?;
     m.add_wrapped(wrap_pyfunction!(read_chunk_table))?;
+    m.add_wrapped(wrap_pyfunction!(write_chunk_table))?;
     m.add("LazrsError", py.get_type::<LazrsError>())?;
     m.add_class::<LazVlr>()?;
     m.add_class::<LasZipDecompressor>()?;
+    m.add_class::<LasZipCompressor>()?;
     m.add_class::<ParLasZipCompressor>()?;
     m.add_class::<ParLasZipDecompressor>()?;
     Ok(())
