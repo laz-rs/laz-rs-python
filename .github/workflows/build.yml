@@ -1,7 +1,6 @@
 name: Building
 
-on:
-  push:
+on: [push, pull_request]
 
 jobs:
   maturin-build:
@@ -9,7 +8,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: [3.6, 3.7, 3.8]
+        python-version: [3.6, 3.7, 3.8, 3.9]
 
     steps:
       - uses: actions/checkout@v1
