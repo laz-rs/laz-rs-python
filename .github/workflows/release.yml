@@ -34,9 +34,10 @@ jobs:
 
       - name: Publish to PyPi
         if:  matrix.os == 'windows-latest'
+        shell: powershell
         run: |
           maturin build --release --interpreter python${{ matrix.python-version }}
-          twine upload -u __token__ -p ${{ secrets.PYPI }} target\wheels\lazrs*.whl
+          Get-ChildItem -Path target\wheels\*.whl | ForEach-Object { twine upload -u __token__ -p ${{ secrets.PYPI }} "$_" }
 
       - name: Publish to PyPi
         if:  matrix.os != 'windows-latest'
