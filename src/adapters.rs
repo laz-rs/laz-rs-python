@@ -1,6 +1,6 @@
 use std::io::SeekFrom;
 
-use pyo3::{IntoPy, ObjectProtocol, PyResult, Python, ToPyObject};
+use pyo3::{IntoPy, PyResult, Python, ToPyObject};
 
 fn py_seek_args_from_rust_seek(
     seek: SeekFrom,
