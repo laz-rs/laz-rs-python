@@ -3,6 +3,7 @@ use pyo3::types::{PyAny, PyType, PyBytes};
 use pyo3::{create_exception, wrap_pyfunction};
 
 use crate::adapters::{PyReadableFileObject, PyWriteableFileObject};
+use std::io::{BufReader, BufWriter};
 
 mod adapters;
 
@@ -90,7 +91,7 @@ impl LazVlr {
 
 #[pyclass]
 struct ParLasZipCompressor {
-    compressor: laz::ParLasZipCompressor<PyWriteableFileObject>,
+    compressor: laz::ParLasZipCompressor<BufWriter<PyWriteableFileObject>>,
 }
 
 #[pymethods]
@@ -100,7 +101,7 @@ impl ParLasZipCompressor {
         Ok({
             ParLasZipCompressor {
                 compressor: laz::ParLasZipCompressor::new(
-                    PyWriteableFileObject::new(dest)?,
+                    BufWriter::new(PyWriteableFileObject::new(dest)?),
                     vlr.vlr.clone(),
                 )
                 .map_err(into_py_err)?,
@@ -123,7 +124,7 @@ impl ParLasZipCompressor {
 
 #[pyclass]
 struct ParLasZipDecompressor {
-    decompressor: laz::ParLasZipDecompressor<PyReadableFileObject>,
+    decompressor: laz::ParLasZipDecompressor<BufReader<PyReadableFileObject>>,
 }
 
 #[pymethods]
@@ -134,8 +135,8 @@ impl ParLasZipDecompressor {
         let vlr = laz::LazVlr::from_buffer(as_bytes(vlr_record_data)?)
             .map_err(into_py_err)?;
         Ok(ParLasZipDecompressor {
-            decompressor: laz::ParLasZipDecompressor::<PyReadableFileObject>::new(
-                PyReadableFileObject::new(gil.python(), source)?,
+            decompressor: laz::ParLasZipDecompressor::<_>::new(
+                BufReader::new(PyReadableFileObject::new(gil.python(), source)?),
                 vlr,
             )
             .map_err(into_py_err)?,
@@ -153,7 +154,7 @@ impl ParLasZipDecompressor {
 
 #[pyclass]
 struct LasZipDecompressor {
-    decompressor: laz::LasZipDecompressor<'static, PyReadableFileObject>,
+    decompressor: laz::LasZipDecompressor<'static, BufReader<PyReadableFileObject>>,
 }
 
 #[pymethods]
@@ -166,10 +167,10 @@ impl LasZipDecompressor {
         let gil = Python::acquire_gil();
         let py = gil.python();
         let vlr = laz::LazVlr::from_buffer(
-            as_bytes( record_data)?
+            as_bytes(record_data)?
         )
         .map_err(into_py_err)?;
-        let source = PyReadableFileObject::new(py, source)?;
+        let source = BufReader::new(PyReadableFileObject::new(py, source)?);
         Ok(Self {
             decompressor: laz::LasZipDecompressor::new(source, vlr).map_err(into_py_err)?,
         })
@@ -182,7 +183,7 @@ impl LasZipDecompressor {
             .map_err(|e| PyErr::new::<LazrsError, String>(format!("{}", e)))
     }
 
-    pub fn  seek(&mut self, point_idx: u64) -> PyResult<()> {
+    pub fn seek(&mut self, point_idx: u64) -> PyResult<()> {
         self.decompressor.seek(point_idx)
             .map_err(into_py_err)
     }
@@ -196,14 +197,14 @@ impl LasZipDecompressor {
 
 #[pyclass]
 struct LasZipCompressor {
-    compressor: laz::LasZipCompressor<'static, PyWriteableFileObject>,
+    compressor: laz::LasZipCompressor<'static, BufWriter<PyWriteableFileObject>>,
 }
 
 #[pymethods]
 impl LasZipCompressor {
     #[new]
     pub fn new(dest: pyo3::PyObject, vlr: &LazVlr) -> PyResult<Self> {
-        let dest = PyWriteableFileObject::new(dest)?;
+        let dest = BufWriter::new(PyWriteableFileObject::new(dest)?);
         Ok(Self {
             compressor: laz::LasZipCompressor::new(dest, vlr.vlr.clone())
                 .map_err(into_py_err)?,
@@ -277,7 +278,7 @@ fn compress_points(
 fn read_chunk_table(source: pyo3::PyObject) -> pyo3::PyResult<pyo3::PyObject> {
     let gil = Python::acquire_gil();
     let py = gil.python();
-    let mut src = PyReadableFileObject::new(py, source)?;
+    let mut src = BufReader::new(PyReadableFileObject::new(py, source)?);
 
     match laz::read_chunk_table(&mut src) {
         None => PyResult::Ok(py.None()),
@@ -291,7 +292,7 @@ fn read_chunk_table(source: pyo3::PyObject) -> pyo3::PyResult<pyo3::PyObject> {
 
 #[pyfunction]
 fn write_chunk_table(dest: pyo3::PyObject, chunk_table: Vec<usize>) -> pyo3::PyResult<()> {
-    let mut dest = PyWriteableFileObject::new(dest)?;
+    let mut dest = BufWriter::new(PyWriteableFileObject::new(dest)?);
 
     laz::write_chunk_table(&mut dest, &chunk_table)
         .map_err(into_py_err)
