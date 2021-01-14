@@ -103,9 +103,11 @@ impl std::io::Read for PyReadableFileObject {
         };
 
         match ret_obj.cast_as::<pyo3::types::PyBytes>(py) {
-            Ok(bytes) => {
-                buf.copy_from_slice(bytes.as_bytes());
-                Ok(bytes.as_bytes().len())
+            Ok(py_bytes) => {
+                let read_bytes = py_bytes.as_bytes();
+                let shortest = std::cmp::min(buf.len(), read_bytes.len());
+                buf[..shortest].copy_from_slice(read_bytes);
+                Ok(read_bytes.len())
             }
             Err(err) => Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
