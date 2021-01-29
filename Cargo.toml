@@ -1,6 +1,6 @@
 [package]
 name = "lazrs"
-version = "0.2.4"
+version = "0.2.5"
 authors = ["tmontaigu <thomas.montaigu@laposte.net>"]
 edition = "2018"
 license = "MIT"
@@ -12,7 +12,7 @@ name = "lazrs"
 crate-type = ["cdylib"]
 
 [dependencies.laz]
-version = "0.5.1"
+version = "0.5.2"
 features = ["parallel"]
 
 [dependencies.pyo3]

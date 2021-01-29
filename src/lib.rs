@@ -3,7 +3,7 @@ use pyo3::types::{PyAny, PyType, PyBytes};
 use pyo3::{create_exception, wrap_pyfunction};
 
 use crate::adapters::{PyReadableFileObject, PyWriteableFileObject};
-use std::io::{BufReader, BufWriter};
+use std::io::{BufReader, BufWriter, Write};
 
 mod adapters;
 
@@ -118,7 +118,8 @@ impl ParLasZipCompressor {
     }
 
     fn done(&mut self) -> PyResult<()> {
-        self.compressor.done().map_err(into_py_err)
+        self.compressor.done().map_err(into_py_err)?;
+        self.compressor.get_mut().flush().map_err(into_py_err)
     }
 }
 
@@ -218,7 +219,8 @@ impl LasZipCompressor {
     }
 
     pub fn done(&mut self) -> PyResult<()> {
-        self.compressor.done().map_err(into_py_err)
+        self.compressor.done().map_err(into_py_err)?;
+        self.compressor.get_mut().flush().map_err(into_py_err)
     }
 }
 
