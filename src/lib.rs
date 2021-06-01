@@ -151,6 +151,10 @@ impl ParLasZipDecompressor {
             .map_err(into_py_err)?;
         Ok(())
     }
+
+    pub fn seek(&mut self, point_idx: u64) -> PyResult<()> {
+        self.decompressor.seek(point_idx).map_err(into_py_err)
+    }
 }
 
 #[pyclass]
