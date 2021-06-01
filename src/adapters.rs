@@ -130,8 +130,7 @@ impl std::io::Seek for PyReadableFileObject {
             .cast_as::<pyo3::types::PyLong>(py)
             .expect("Failed to cast to pylong")
             .extract()
-            .expect("Failed to cast to u64zz");
+            .expect("Failed to cast to u64");
         Ok(new_pos)
     }
 }
-

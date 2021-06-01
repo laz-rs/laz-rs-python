@@ -1,5 +1,5 @@
 use pyo3::prelude::*;
-use pyo3::types::{PyAny, PyType, PyBytes};
+use pyo3::types::{PyAny, PyBytes, PyType};
 use pyo3::{create_exception, wrap_pyfunction};
 
 use crate::adapters::{PyReadableFileObject, PyWriteableFileObject};
@@ -11,7 +11,6 @@ create_exception!(pylaz, LazrsError, pyo3::exceptions::PyRuntimeError);
 
 fn as_bytes(object: &PyAny) -> PyResult<&[u8]> {
     let buffer = pyo3::buffer::PyBuffer::<u8>::get(object)?;
-
 
     let slc =
         unsafe { std::slice::from_raw_parts(buffer.buf_ptr() as *const u8, buffer.len_bytes()) };
@@ -83,8 +82,7 @@ impl LazVlr {
 
         let gil = Python::acquire_gil();
         let py = gil.python();
-        let bytes = PyBytes::new(py, data.get_ref())
-            .to_object(py);
+        let bytes = PyBytes::new(py, data.get_ref()).to_object(py);
         Ok(bytes)
     }
 }
@@ -133,8 +131,7 @@ impl ParLasZipDecompressor {
     #[new]
     fn new(source: PyObject, vlr_record_data: &PyAny) -> PyResult<Self> {
         let gil = Python::acquire_gil();
-        let vlr = laz::LazVlr::from_buffer(as_bytes(vlr_record_data)?)
-            .map_err(into_py_err)?;
+        let vlr = laz::LazVlr::from_buffer(as_bytes(vlr_record_data)?).map_err(into_py_err)?;
         Ok(ParLasZipDecompressor {
             decompressor: laz::ParLasZipDecompressor::<_>::new(
                 BufReader::new(PyReadableFileObject::new(gil.python(), source)?),
@@ -165,16 +162,10 @@ struct LasZipDecompressor {
 #[pymethods]
 impl LasZipDecompressor {
     #[new]
-    pub fn new(
-        source: pyo3::PyObject,
-        record_data: &pyo3::types::PyAny,
-    ) -> PyResult<Self> {
+    pub fn new(source: pyo3::PyObject, record_data: &pyo3::types::PyAny) -> PyResult<Self> {
         let gil = Python::acquire_gil();
         let py = gil.python();
-        let vlr = laz::LazVlr::from_buffer(
-            as_bytes(record_data)?
-        )
-        .map_err(into_py_err)?;
+        let vlr = laz::LazVlr::from_buffer(as_bytes(record_data)?).map_err(into_py_err)?;
         let source = BufReader::new(PyReadableFileObject::new(py, source)?);
         Ok(Self {
             decompressor: laz::LasZipDecompressor::new(source, vlr).map_err(into_py_err)?,
@@ -189,14 +180,13 @@ impl LasZipDecompressor {
     }
 
     pub fn seek(&mut self, point_idx: u64) -> PyResult<()> {
-        self.decompressor.seek(point_idx)
-            .map_err(into_py_err)
+        self.decompressor.seek(point_idx).map_err(into_py_err)
     }
 
     pub fn vlr(&self) -> LazVlr {
         return LazVlr {
-            vlr: self.decompressor.vlr().clone()
-        }
+            vlr: self.decompressor.vlr().clone(),
+        };
     }
 }
 
@@ -211,8 +201,7 @@ impl LasZipCompressor {
     pub fn new(dest: pyo3::PyObject, vlr: &LazVlr) -> PyResult<Self> {
         let dest = BufWriter::new(PyWriteableFileObject::new(dest)?);
         Ok(Self {
-            compressor: laz::LasZipCompressor::new(dest, vlr.vlr.clone())
-                .map_err(into_py_err)?,
+            compressor: laz::LasZipCompressor::new(dest, vlr.vlr.clone()).map_err(into_py_err)?,
         })
     }
 
@@ -236,7 +225,7 @@ fn decompress_points(
     parallel: bool,
 ) -> PyResult<()> {
     let vlr_data = as_bytes(laszip_vlr_record_data)?;
-    let data_slc = as_bytes( compressed_points_data)?;
+    let data_slc = as_bytes(compressed_points_data)?;
     let output = as_mut_bytes(decompression_output)?;
 
     laz::LazVlr::from_buffer(vlr_data)
@@ -275,8 +264,7 @@ fn compress_points(
     }
     let gil = Python::acquire_gil();
     let py = gil.python();
-    let bytes = PyBytes::new(py, compression_result.get_ref())
-        .to_object(py);
+    let bytes = PyBytes::new(py, compression_result.get_ref()).to_object(py);
     Ok(bytes)
 }
 
@@ -300,8 +288,7 @@ fn read_chunk_table(source: pyo3::PyObject) -> pyo3::PyResult<pyo3::PyObject> {
 fn write_chunk_table(dest: pyo3::PyObject, chunk_table: Vec<usize>) -> pyo3::PyResult<()> {
     let mut dest = BufWriter::new(PyWriteableFileObject::new(dest)?);
 
-    laz::write_chunk_table(&mut dest, &chunk_table)
-        .map_err(into_py_err)
+    laz::write_chunk_table(&mut dest, &chunk_table).map_err(into_py_err)
 }
 
 /// This module is a python module implemented in Rust.
