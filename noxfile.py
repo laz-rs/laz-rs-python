@@ -5,6 +5,7 @@ import shutil
 
 WHEEL_DIR = Path(os.environ.get("CARGO_TARGET_DIR", '.target')) / "wheels"
 
+Path('dist').mkdir(exist_ok=True)
 
 @nox.session(python=['3.6', '3.7', '3.8', '3.9'])
 def build_wheel(session):
@@ -21,4 +22,4 @@ def build_wheel(session):
     session.run('python', '-c', 'import lazrs')
 
     # Save the wheel as its going to be erased by the next cargo clean
-    shutil.copy(wheel, '.')
+    shutil.copy(wheel, 'dist')

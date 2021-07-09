@@ -96,15 +96,11 @@ struct ParLasZipCompressor {
 impl ParLasZipCompressor {
     #[new]
     fn new(dest: PyObject, vlr: &LazVlr) -> PyResult<Self> {
-        Ok({
-            ParLasZipCompressor {
-                compressor: laz::ParLasZipCompressor::new(
-                    BufWriter::new(PyWriteableFileObject::new(dest)?),
-                    vlr.vlr.clone(),
-                )
-                .map_err(into_py_err)?,
-            }
-        })
+        let dest = BufWriter::new(PyWriteableFileObject::new(dest)?);
+        let mut compressor =
+            laz::ParLasZipCompressor::new(dest, vlr.vlr.clone()).map_err(into_py_err)?;
+        compressor.get_mut().flush()?;
+        Ok(ParLasZipCompressor { compressor })
     }
 
     fn compress_many(&mut self, points: &PyAny) -> PyResult<()> {
@@ -132,12 +128,9 @@ impl ParLasZipDecompressor {
     fn new(source: PyObject, vlr_record_data: &PyAny) -> PyResult<Self> {
         let gil = Python::acquire_gil();
         let vlr = laz::LazVlr::from_buffer(as_bytes(vlr_record_data)?).map_err(into_py_err)?;
+        let source = BufReader::new(PyReadableFileObject::new(gil.python(), source)?);
         Ok(ParLasZipDecompressor {
-            decompressor: laz::ParLasZipDecompressor::<_>::new(
-                BufReader::new(PyReadableFileObject::new(gil.python(), source)?),
-                vlr,
-            )
-            .map_err(into_py_err)?,
+            decompressor: laz::ParLasZipDecompressor::<_>::new(source, vlr).map_err(into_py_err)?,
         })
     }
 
@@ -164,9 +157,8 @@ impl LasZipDecompressor {
     #[new]
     pub fn new(source: pyo3::PyObject, record_data: &pyo3::types::PyAny) -> PyResult<Self> {
         let gil = Python::acquire_gil();
-        let py = gil.python();
         let vlr = laz::LazVlr::from_buffer(as_bytes(record_data)?).map_err(into_py_err)?;
-        let source = BufReader::new(PyReadableFileObject::new(py, source)?);
+        let source = BufReader::new(PyReadableFileObject::new(gil.python(), source)?);
         Ok(Self {
             decompressor: laz::LasZipDecompressor::new(source, vlr).map_err(into_py_err)?,
         })
@@ -200,9 +192,10 @@ impl LasZipCompressor {
     #[new]
     pub fn new(dest: pyo3::PyObject, vlr: &LazVlr) -> PyResult<Self> {
         let dest = BufWriter::new(PyWriteableFileObject::new(dest)?);
-        Ok(Self {
-            compressor: laz::LasZipCompressor::new(dest, vlr.vlr.clone()).map_err(into_py_err)?,
-        })
+        let mut compressor =
+            laz::LasZipCompressor::new(dest, vlr.vlr.clone()).map_err(into_py_err)?;
+        compressor.get_mut().flush()?;
+        Ok(Self { compressor })
     }
 
     pub fn compress_many(&mut self, points: &PyAny) -> PyResult<()> {
