@@ -103,7 +103,9 @@ impl ParLasZipCompressor {
     }
 
     pub fn reserve_offset_to_chunk_table(&mut self) -> PyResult<()> {
-        self.compressor.reserve_offset_to_chunk_table().map_err(into_py_err)?;
+        self.compressor
+            .reserve_offset_to_chunk_table()
+            .map_err(into_py_err)?;
         self.compressor.get_mut().flush().map_err(into_py_err)
     }
 
@@ -196,13 +198,14 @@ impl LasZipCompressor {
     #[new]
     pub fn new(dest: pyo3::PyObject, vlr: &LazVlr) -> PyResult<Self> {
         let dest = BufWriter::new(PyWriteableFileObject::new(dest)?);
-        let compressor =
-            laz::LasZipCompressor::new(dest, vlr.vlr.clone()).map_err(into_py_err)?;
+        let compressor = laz::LasZipCompressor::new(dest, vlr.vlr.clone()).map_err(into_py_err)?;
         Ok(Self { compressor })
     }
 
     pub fn reserve_offset_to_chunk_table(&mut self) -> PyResult<()> {
-        self.compressor.reserve_offset_to_chunk_table().map_err(into_py_err)?;
+        self.compressor
+            .reserve_offset_to_chunk_table()
+            .map_err(into_py_err)?;
         self.compressor.get_mut().flush().map_err(into_py_err)
     }
 
