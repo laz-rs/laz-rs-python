@@ -1,6 +1,6 @@
 [package]
 name = "lazrs"
-version = "0.3.1"
+version = "0.4.0"
 authors = ["tmontaigu <thomas.montaigu@laposte.net>"]
 edition = "2018"
 license = "MIT"
@@ -12,8 +12,8 @@ name = "lazrs"
 crate-type = ["cdylib"]
 
 [dependencies.laz]
+#version = "0.5.2"
 git = "https://github.com/tmontaigu/laz-rs"
-rev = "fd7901ddfd083189795c4617c3450ecc028d6f15"
 features = ["parallel"]
 
 [dependencies.pyo3]
