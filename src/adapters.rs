@@ -29,15 +29,15 @@ fn py_seek_args_from_rust_seek(
     match seek {
         SeekFrom::Start(n) => {
             let value: pyo3::PyObject = n.into_py(py);
-            (value, io_module.get("SEEK_SET").unwrap().to_object(py))
+            (value, io_module.getattr("SEEK_SET").unwrap().to_object(py))
         }
         SeekFrom::End(n) => {
             let value: pyo3::PyObject = n.into_py(py);
-            (value, io_module.get("SEEK_END").unwrap().to_object(py))
+            (value, io_module.getattr("SEEK_END").unwrap().to_object(py))
         }
         SeekFrom::Current(n) => {
             let value: pyo3::PyObject = n.into_py(py);
-            (value, io_module.get("SEEK_CUR").unwrap().to_object(py))
+            (value, io_module.getattr("SEEK_CUR").unwrap().to_object(py))
         }
     }
 }
