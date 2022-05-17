@@ -40,7 +40,13 @@ jobs:
 #          Get-ChildItem -Path .\target\wheels\*.whl | ForEach-Object { twine upload -u __token__ -p ${{ secrets.PYPI }} $_.FullName }
 
       - name: Publish to PyPi
-        if:  matrix.os != 'windows-latest'
+        if:  matrix.os == 'ubuntu-latest'
+        run: |
+          docker run --rm -v $(pwd):/io ghcr.io/pyo3/maturin build --release --interpreter python${{ matrix.python-version }}
+          twine upload -u __token__ -p ${{ secrets.PYPI }} target/wheels/lazrs*.whl
+
+      - name: Publish to PyPi
+        if:  matrix.os == 'macos-latest'
         run: |
           maturin build --release --interpreter python${{ matrix.python-version }}
           twine upload -u __token__ -p ${{ secrets.PYPI }} target/wheels/lazrs*.whl

@@ -30,5 +30,14 @@ jobs:
           override: true
 
       - name: Build
-        run: maturin build --release
+        if:  matrix.os == 'ubuntu-latest'
+        run: docker run --rm -v $(pwd):/io ghcr.io/pyo3/maturin build
 
+      - name: Build
+        if:  matrix.os != 'ubuntu-latest'
+        run: maturin build --compatibility manylinux2010
+
+      # Upload the wheels of the build for manual download/inspection
+      - uses: actions/upload-artifact@v2
+        with:
+          path: ./target/wheels/lazrs*.whl
