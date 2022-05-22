@@ -8,7 +8,7 @@ WHEEL_DIR = Path(os.environ.get("CARGO_TARGET_DIR", '.target')) / "wheels"
 Path('dist').mkdir(exist_ok=True)
 
 
-@nox.session(python=['3.6', '3.7', '3.8', '3.9', '3.10'])
+@nox.session(python=['3.7', '3.8', '3.9', '3.10'])
 def build_wheel(session):
     session.install('maturin')
     session.run('cargo', 'clean', external=True)

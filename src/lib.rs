@@ -3,7 +3,7 @@ use pyo3::types::{PyAny, PyBytes, PyList, PyType};
 use pyo3::{create_exception, wrap_pyfunction};
 
 use crate::adapters::{PyReadableFileObject, PyWriteableFileObject};
-use std::io::{BufReader, BufWriter, Write};
+use std::io::{BufReader, BufWriter, Read, Write};
 
 mod adapters;
 
@@ -168,6 +168,11 @@ impl ParLasZipDecompressor {
     pub fn seek(&mut self, point_idx: u64) -> PyResult<()> {
         self.decompressor.seek(point_idx).map_err(into_py_err)
     }
+
+    pub fn read_raw_bytes_into(&mut self, bytes: &PyAny) -> PyResult<()> {
+        let slc = as_mut_bytes(bytes)?;
+        self.decompressor.get_mut().read_exact(slc).map_err(into_py_err)
+    }
 }
 
 #[pyclass]
@@ -202,6 +207,31 @@ impl LasZipDecompressor {
         return LazVlr {
             vlr: self.decompressor.vlr().clone(),
         };
+    }
+
+    // See the documentation of the free function with the same name.
+    // it has the same requirements.
+    pub fn read_chunk_table_only(&mut self) -> PyResult<PyObject> {
+        let gil = Python::acquire_gil();
+        let py = gil.python();
+        let uses_variable_chunk_size = self.decompressor.vlr().uses_variable_size_chunks();
+        let chunk_table =
+            laz::laszip::ChunkTable::read(
+                self.decompressor.get_mut(),
+                uses_variable_chunk_size)
+                .map_err(into_py_err)?;
+        let elements = chunk_table
+            .as_ref()
+            .iter()
+            .map(|entry| (entry.point_count, entry.byte_count));
+        let list = PyList::new(py, elements);
+        Ok(list.to_object(py))
+    }
+
+
+    pub fn read_raw_bytes_into(&mut self, bytes: &PyAny) -> PyResult<()> {
+        let slc = as_mut_bytes(bytes)?;
+        self.decompressor.get_mut().read_exact(slc).map_err(into_py_err)
     }
 }
 
@@ -273,7 +303,6 @@ fn decompress_points(
     Ok(())
 }
 
-// TODO find a better name
 #[pyfunction]
 fn decompress_points_with_chunk_table(
     compressed_points_data: &PyAny,
@@ -324,6 +353,14 @@ fn compress_points(
     Ok(bytes)
 }
 
+/// This reads the chunks table.
+///
+/// It reads it by first reading the offset to the table,
+/// seeks to the position given by the offset, and reads the table.
+///
+/// Afterwards, it leaves the source position at that actual start of points.
+///
+/// The `source` position **must** be at the beginning of the points data
 #[pyfunction]
 fn read_chunk_table(source: pyo3::PyObject, vlr: &LazVlr) -> pyo3::PyResult<pyo3::PyObject> {
     let gil = Python::acquire_gil();
@@ -332,6 +369,29 @@ fn read_chunk_table(source: pyo3::PyObject, vlr: &LazVlr) -> pyo3::PyResult<pyo3
 
     let chunk_table =
         laz::laszip::ChunkTable::read_from(&mut src, &vlr.vlr).map_err(into_py_err)?;
+    let elements = chunk_table
+        .as_ref()
+        .iter()
+        .map(|entry| (entry.point_count, entry.byte_count));
+    let list = pyo3::types::PyList::new(py, elements);
+    Ok(list.to_object(py))
+}
+
+/// This reads the chunks table.
+///
+/// This simply reads the chunk table, it *does not* read offset nor seeks
+/// *nor* does it puts the source position to the actual start of points data
+/// afterwards.
+///
+/// The `source` position **must** be at the beginning of the chunk table
+#[pyfunction]
+fn read_chunk_table_only(source: pyo3::PyObject, vlr: &LazVlr) -> pyo3::PyResult<pyo3::PyObject> {
+    let gil = Python::acquire_gil();
+    let py = gil.python();
+    let mut src = BufReader::new(PyReadableFileObject::new(py, source)?);
+
+    let chunk_table =
+        laz::laszip::ChunkTable::read(&mut src, vlr.uses_variable_size_chunks()).map_err(into_py_err)?;
     let elements = chunk_table
         .as_ref()
         .iter()
@@ -371,6 +431,7 @@ fn lazrs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_wrapped(wrap_pyfunction!(decompress_points))?;
     m.add_wrapped(wrap_pyfunction!(compress_points))?;
     m.add_wrapped(wrap_pyfunction!(read_chunk_table))?;
+    m.add_wrapped(wrap_pyfunction!(read_chunk_table_only))?;
     m.add_wrapped(wrap_pyfunction!(write_chunk_table))?;
     m.add_wrapped(wrap_pyfunction!(decompress_points_with_chunk_table))?;
     m.add("LazrsError", py.get_type::<LazrsError>())?;
