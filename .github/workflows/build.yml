@@ -3,11 +3,62 @@ name: Building
 on: [push, pull_request]
 
 jobs:
-  maturin-build:
-    runs-on: ${{ matrix.os }}
+  macos-build-x86_64:
+    runs-on: macos-latest
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+          python-version: [ '3.7', '3.8', '3.9', '3.10' ]
+    steps:
+      - uses: actions/checkout@v1
+
+      - uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Build wheels
+        uses: messense/maturin-action@v1
+        with:
+          target: x86_64-apple-darwin
+          command: build
+          args: --release --out dist --no-sdist --interpreter python${{ matrix.python-version }}
+
+      # Upload the wheels of the build for manual download/inspection
+      - uses: actions/upload-artifact@v2
+        with:
+          path: ./dist/*.whl
+
+  macos-build-aarch64:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [ '3.9', '3.10' ]
+    steps:
+      - uses: actions/checkout@v1
+
+      - uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Build wheels
+        uses: messense/maturin-action@v1
+        with:
+          target: aarch64-apple-darwin
+          command: build
+          args: --release --out dist --no-sdist --interpreter python${{ matrix.python-version }}
+
+      # Upload the wheels of the build for manual download/inspection
+      - uses: actions/upload-artifact@v2
+        with:
+          path: ./dist/*.whl
+
+
+  windows-build-x86_64:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
         python-version: [ '3.7', '3.8', '3.9', '3.10' ]
 
     steps:
@@ -18,26 +69,53 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install maturin
-
-      - name: Install latest nightly
-        uses: actions-rs/toolchain@v1
+      - name: Build wheels
+        uses: messense/maturin-action@v1
         with:
-          toolchain: nightly
-          override: true
-
-      - name: Build
-        if:  matrix.os == 'ubuntu-latest'
-        run: docker run --rm -v $(pwd):/io ghcr.io/pyo3/maturin build
-
-      - name: Build
-        if:  matrix.os != 'ubuntu-latest'
-        run: maturin build --compatibility manylinux2010
+          command: build
+          args: --release --out dist --no-sdist
 
       # Upload the wheels of the build for manual download/inspection
       - uses: actions/upload-artifact@v2
         with:
-          path: ./target/wheels/lazrs*.whl
+          path: ./dist/*.whl
+
+
+  linux-build:
+    name: 'linux-build-${{ matrix.target }} (${{ matrix.python-version }})'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [x86_64, aarch64]
+        python-version: ['3.7', '3.8', '3.9', '3.10']
+    steps:
+      - uses: actions/checkout@v1
+
+      - uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Build wheels
+        if: matrix.target == 'x86_64'
+        uses: messense/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          command: build
+          manylinux: 2010
+          args: --release --out dist --no-sdist --interpreter python${{ matrix.python-version }}
+
+      - name: Build wheels
+        if: matrix.target == 'aarch64'
+        uses: messense/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          command: build
+          manylinux: auto
+          args: --release --out dist --no-sdist --interpreter python${{ matrix.python-version }}
+
+      # Upload the wheels of the build for manual download/inspection
+      - uses: actions/upload-artifact@v2
+        with:
+          path: ./dist/*.whl
+
