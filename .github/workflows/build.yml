@@ -93,19 +93,36 @@ jobs:
 
 
   linux-build:
-    name: 'linux-build-${{ matrix.target }} (${{ matrix.python-version }})'
+    name: 'linux-build-${{ matrix.target }} (${{ matrix.python.version }})'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         target: [x86_64, aarch64]
-        python-version: ['3.7', '3.8', '3.9', '3.10']
+        python: [
+          {
+            version: '3.7',
+            PYO3_CROSS_LIB_DIR: '/opt/python/cp37-cp37m/lib'
+          },
+          {
+            version: '3.8',
+            PYO3_CROSS_LIB_DIR: '/opt/python/cp38-cp38/lib'
+          },
+          {
+            version: '3.9',
+            PYO3_CROSS_LIB_DIR: '/opt/python/cp39-cp39/lib'
+          },
+          {
+            version: '3.10',
+            PYO3_CROSS_LIB_DIR: '/opt/python/cp310-cp310/lib'
+          },
+        ]
     steps:
       - uses: actions/checkout@v1
 
       - uses: actions/setup-python@v2
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ matrix.python.version }}
 
       - name: Build wheels
         if: matrix.target == 'x86_64'
@@ -114,16 +131,19 @@ jobs:
           target: ${{ matrix.target }}
           command: build
           manylinux: 2010
-          args: --release --out dist --no-sdist --interpreter python${{ matrix.python-version }}
+          args: --release --out dist --no-sdist --interpreter python${{ matrix.python.version }}
 
       - name: Build wheels
         if: matrix.target == 'aarch64'
         uses: messense/maturin-action@v1
+        env:
+          PYO3_CROSS_LIB_DIR: '${{ matrix.python.PYO3_CROSS_LIB_DIR }}'
         with:
           target: ${{ matrix.target }}
           command: build
           manylinux: auto
-          args: --release --out dist --no-sdist --interpreter python${{ matrix.python-version }}
+          args: --release --out dist --no-sdist --interpreter python${{ matrix.python.version }}
+
 
       # Upload the wheels of the build for manual download/inspection
       - uses: actions/upload-artifact@v2
