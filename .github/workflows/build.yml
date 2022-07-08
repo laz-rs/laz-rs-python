@@ -54,12 +54,14 @@ jobs:
           path: ./dist/*.whl
 
 
-  windows-build-x86_64:
+  windows-build:
+    name: windows-build-${{ matrix.arch }} (${{ matrix.python-version }})
     runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
         python-version: [ '3.7', '3.8', '3.9', '3.10' ]
+        arch: ['x86', 'x64']
 
     steps:
       - uses: actions/checkout@v1
@@ -68,8 +70,17 @@ jobs:
         uses: actions/setup-python@v1
         with:
           python-version: ${{ matrix.python-version }}
+          architecture: ${{ matrix.arch }}
 
       - name: Build wheels
+        if: matrix.arch == 'x86'
+        uses: messense/maturin-action@v1
+        with:
+          command: build
+          args: --release --out dist --no-sdist --target i686-pc-windows-msvc
+
+      - name: Build wheels
+        if: matrix.arch == 'x64'
         uses: messense/maturin-action@v1
         with:
           command: build
