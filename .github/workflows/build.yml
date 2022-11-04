@@ -150,3 +150,24 @@ jobs:
         with:
           path: ./dist/*.whl
 
+  # sdist is needed for the conda recipe
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+
+      - uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python.version }}
+
+      - name: Build sdist
+        uses: messense/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
+
+      # Upload the wheels of the build for manual download/inspection
+      - uses: actions/upload-artifact@v2
+        with:
+          path: ./dist/*.tar.gz
+
