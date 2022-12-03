@@ -168,6 +168,7 @@ jobs:
         uses: messense/maturin-action@v1
         with:
           command: sdist
+          manylinux: 2014
           args: --out dist
 
       # Upload the wheels of the build for manual download/inspection
