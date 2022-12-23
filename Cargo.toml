@@ -2,7 +2,7 @@
 name = "lazrs"
 version = "0.4.5"
 authors = ["tmontaigu <thomas.montaigu@laposte.net>"]
-edition = "2018"
+edition = "2021"
 license = "MIT"
 description = "Python bindings for laz-rs"
 readme = "README.md"
@@ -12,7 +12,7 @@ name = "lazrs"
 crate-type = ["cdylib"]
 
 [dependencies.laz]
-version = "0.7.0"
+version = "0.8.0"
 features = ["parallel"]
 
 [dependencies.pyo3]

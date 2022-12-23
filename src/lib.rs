@@ -38,6 +38,18 @@ fn into_py_err<T: std::fmt::Display>(error: T) -> PyErr {
 }
 
 #[pyclass]
+#[derive(Copy, Clone, Debug)]
+struct DecompressionSelection(laz::DecompressionSelection);
+
+#[pymethods]
+impl DecompressionSelection {
+    #[new]
+    fn new(value: u32) -> Self {
+        Self(laz::DecompressionSelection(value))
+    }
+}
+
+#[pyclass]
 struct LazVlr {
     vlr: laz::LazVlr,
 }
@@ -148,13 +160,27 @@ struct ParLasZipDecompressor {
 #[pymethods]
 impl ParLasZipDecompressor {
     #[new]
-    fn new(source: PyObject, vlr_record_data: &PyAny) -> PyResult<Self> {
+    #[args(selection = "None")]
+    fn new(
+        source: PyObject,
+        vlr_record_data: &PyAny,
+        selection: Option<DecompressionSelection>,
+    ) -> PyResult<Self> {
         Python::with_gil(|py| {
             let source = BufReader::new(PyReadableFileObject::new(py, source)?);
             let vlr = laz::LazVlr::read_from(as_bytes(vlr_record_data)?).map_err(into_py_err)?;
-            Ok(ParLasZipDecompressor {
-                decompressor: laz::ParLasZipDecompressor::new(source, vlr).map_err(into_py_err)?,
-            })
+
+            if let Some(selection) = selection {
+                Ok(ParLasZipDecompressor {
+                    decompressor: laz::ParLasZipDecompressor::selective(source, vlr, selection.0)
+                        .map_err(into_py_err)?,
+                })
+            } else {
+                Ok(ParLasZipDecompressor {
+                    decompressor: laz::ParLasZipDecompressor::new(source, vlr)
+                        .map_err(into_py_err)?,
+                })
+            }
         })
     }
 
@@ -187,13 +213,26 @@ struct LasZipDecompressor {
 #[pymethods]
 impl LasZipDecompressor {
     #[new]
-    pub fn new(source: pyo3::PyObject, record_data: &pyo3::types::PyAny) -> PyResult<Self> {
+    #[args(selection = "None")]
+    pub fn new(
+        source: PyObject,
+        record_data: &PyAny,
+        selection: Option<DecompressionSelection>,
+    ) -> PyResult<Self> {
         Python::with_gil(|py| {
             let source = BufReader::new(PyReadableFileObject::new(py, source)?);
             let vlr = laz::LazVlr::read_from(as_bytes(record_data)?).map_err(into_py_err)?;
-            Ok(Self {
-                decompressor: laz::LasZipDecompressor::new(source, vlr).map_err(into_py_err)?,
-            })
+
+            if let Some(selection) = selection {
+                Ok(Self {
+                    decompressor: laz::LasZipDecompressor::selective(source, vlr, selection.0)
+                        .map_err(into_py_err)?,
+                })
+            } else {
+                Ok(Self {
+                    decompressor: laz::LasZipDecompressor::new(source, vlr).map_err(into_py_err)?,
+                })
+            }
         })
     }
 
@@ -310,12 +349,13 @@ fn decompress_points(
     Ok(())
 }
 
-#[pyfunction]
+#[pyfunction(selection = "None")]
 fn decompress_points_with_chunk_table(
     compressed_points_data: &PyAny,
     laszip_vlr_record_data: &PyAny,
     decompression_output: &PyAny,
     py_chunk_table: &PyList,
+    selection: Option<DecompressionSelection>,
 ) -> PyResult<()> {
     let vlr_data = as_bytes(laszip_vlr_record_data)?;
     let data_slc = as_bytes(compressed_points_data)?;
@@ -324,8 +364,17 @@ fn decompress_points_with_chunk_table(
 
     laz::LazVlr::read_from(vlr_data)
         .and_then(|vlr| {
-            // TODO
-            laz::par_decompress(data_slc, output, &vlr, chunk_table.as_ref())
+            if let Some(selection) = selection {
+                laz::par_decompress_selective(
+                    data_slc,
+                    output,
+                    &vlr,
+                    chunk_table.as_ref(),
+                    selection.0,
+                )
+            } else {
+                laz::par_decompress(data_slc, output, &vlr, chunk_table.as_ref())
+            }
         })
         .map_err(into_py_err)?;
 
@@ -447,5 +496,52 @@ fn lazrs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<LasZipCompressor>()?;
     m.add_class::<ParLasZipCompressor>()?;
     m.add_class::<ParLasZipDecompressor>()?;
+    m.add_class::<DecompressionSelection>()?;
+
+    m.add(
+        "SELECTIVE_DECOMPRESS_XY_RETURNS_CHANNEL",
+        laz::DecompressionSelection::XY_RETURNS_CHANNEL,
+    )?;
+    m.add("SELECTIVE_DECOMPRESS_ALL", laz::DecompressionSelection::ALL)?;
+    m.add("SELECTIVE_DECOMPRESS_Z", laz::DecompressionSelection::Z)?;
+    m.add(
+        "SELECTIVE_DECOMPRESS_CLASSIFICATION",
+        laz::DecompressionSelection::CLASSIFICATION,
+    )?;
+    m.add(
+        "SELECTIVE_DECOMPRESS_FLAGS",
+        laz::DecompressionSelection::FLAGS,
+    )?;
+    m.add(
+        "SELECTIVE_DECOMPRESS_INTENSITY",
+        laz::DecompressionSelection::INTENSITY,
+    )?;
+    m.add(
+        "SELECTIVE_DECOMPRESS_SCAN_ANGLE",
+        laz::DecompressionSelection::SCAN_ANGLE,
+    )?;
+    m.add(
+        "SELECTIVE_DECOMPRESS_USER_DATA",
+        laz::DecompressionSelection::USER_DATA,
+    )?;
+    m.add(
+        "SELECTIVE_DECOMPRESS_POINT_SOURCE_ID",
+        laz::DecompressionSelection::POINT_SOURCE_ID,
+    )?;
+    m.add(
+        "SELECTIVE_DECOMPRESS_GPS_TIME",
+        laz::DecompressionSelection::GPS_TIME,
+    )?;
+    m.add("SELECTIVE_DECOMPRESS_RGB", laz::DecompressionSelection::RGB)?;
+    m.add("SELECTIVE_DECOMPRESS_NIR", laz::DecompressionSelection::NIR)?;
+    m.add(
+        "SELECTIVE_DECOMPRESS_WAVEPACKET",
+        laz::DecompressionSelection::WAVEPACKET,
+    )?;
+    m.add(
+        "SELECTIVE_DECOMPRESS_ALL_EXTRA_BYTES",
+        laz::DecompressionSelection::ALL_EXTRA_BYTES,
+    )?;
+
     Ok(())
 }
