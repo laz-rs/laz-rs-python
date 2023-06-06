@@ -7,7 +7,7 @@ use std::io::{BufReader, BufWriter, Read, Write};
 
 mod adapters;
 
-create_exception!(pylaz, LazrsError, pyo3::exceptions::PyRuntimeError);
+create_exception!(lazrs, LazrsError, pyo3::exceptions::PyRuntimeError);
 
 fn as_bytes(object: &PyAny) -> PyResult<&[u8]> {
     let buffer = pyo3::buffer::PyBuffer::<u8>::get(object)?;
