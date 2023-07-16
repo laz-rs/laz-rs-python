@@ -12,7 +12,7 @@ name = "lazrs"
 crate-type = ["cdylib"]
 
 [dependencies.laz]
-version = "0.8.0"
+version = "0.8.1"
 features = ["parallel"]
 
 [dependencies.pyo3]
