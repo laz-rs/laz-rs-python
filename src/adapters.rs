@@ -142,7 +142,7 @@ impl std::io::Read for PyReadableFileObject {
                         )
                     })?;
 
-                match object.cast_as::<pyo3::types::PyBytes>(py) {
+                match object.downcast::<pyo3::types::PyBytes>(py) {
                     Ok(py_bytes) => {
                         let read_bytes = py_bytes.as_bytes();
                         let shortest = std::cmp::min(buf.len(), read_bytes.len());

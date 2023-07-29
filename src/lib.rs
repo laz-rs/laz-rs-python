@@ -160,7 +160,7 @@ struct ParLasZipDecompressor {
 #[pymethods]
 impl ParLasZipDecompressor {
     #[new]
-    #[args(selection = "None")]
+    #[pyo3(signature=(source, vlr_record_data, selection = None))]
     fn new(
         source: PyObject,
         vlr_record_data: &PyAny,
@@ -213,7 +213,7 @@ struct LasZipDecompressor {
 #[pymethods]
 impl LasZipDecompressor {
     #[new]
-    #[args(selection = "None")]
+    #[pyo3(signature = (source, record_data, selection = None))]
     pub fn new(
         source: PyObject,
         record_data: &PyAny,
@@ -349,7 +349,14 @@ fn decompress_points(
     Ok(())
 }
 
-#[pyfunction(selection = "None")]
+#[pyfunction]
+#[pyo3(signature = (
+    compressed_points_data,
+    laszip_vlr_record_data,
+    decompression_output,
+    py_chunk_table,
+    selection = None
+))]
 fn decompress_points_with_chunk_table(
     compressed_points_data: &PyAny,
     laszip_vlr_record_data: &PyAny,
