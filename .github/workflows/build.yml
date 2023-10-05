@@ -8,7 +8,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-          python-version: [ '3.7', '3.8', '3.9', '3.10', '3.11' ]
+          python-version: [ '3.7', '3.8', '3.9', '3.10', '3.11', '3.12' ]
     steps:
       - uses: actions/checkout@v1
 
@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [ '3.9', '3.10', '3.11' ]
+        python-version: [ '3.9', '3.10', '3.11', '3.12' ]
     steps:
       - uses: actions/checkout@v1
 
@@ -60,7 +60,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [ '3.7', '3.8', '3.9', '3.10', '3.11' ]
+        python-version: [ '3.7', '3.8', '3.9', '3.10', '3.11', '3.12' ]
         arch: ['x86', 'x64']
 
     steps:
@@ -120,6 +120,10 @@ jobs:
             version: '3.11',
             PYO3_CROSS_LIB_DIR: '/opt/python/cp311-cp311/lib'
           },
+          {
+            version: '3.12',
+            PYO3_CROSS_LIB_DIR: '/opt/python/cp312-cp312/lib'
+          }
         ]
     steps:
       - uses: actions/checkout@v1
