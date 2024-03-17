@@ -1,8 +1,7 @@
+use adapters::{BufReadWritePyFileObject, PyFileObject};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyBytes, PyList, PyType};
 use pyo3::{create_exception, wrap_pyfunction};
-
-use crate::adapters::{PyReadableFileObject, PyWriteableFileObject};
 use std::io::{BufReader, BufWriter, Read, Write};
 
 mod adapters;
@@ -109,14 +108,15 @@ impl LazVlr {
 
 #[pyclass]
 struct ParLasZipCompressor {
-    compressor: laz::ParLasZipCompressor<BufWriter<PyWriteableFileObject>>,
+    compressor: laz::ParLasZipCompressor<BufWriter<PyFileObject>>,
 }
 
 #[pymethods]
 impl ParLasZipCompressor {
     #[new]
     fn new(dest: PyObject, vlr: &LazVlr) -> PyResult<Self> {
-        let dest = BufWriter::new(PyWriteableFileObject::new(dest)?);
+        let dest = Python::with_gil(|py| PyFileObject::new(py, dest))?;
+        let dest = BufWriter::new(dest);
         let compressor =
             laz::ParLasZipCompressor::new(dest, vlr.vlr.clone()).map_err(into_py_err)?;
         Ok(ParLasZipCompressor { compressor })
@@ -154,7 +154,7 @@ impl ParLasZipCompressor {
 
 #[pyclass]
 struct ParLasZipDecompressor {
-    decompressor: laz::ParLasZipDecompressor<BufReader<PyReadableFileObject>>,
+    decompressor: laz::ParLasZipDecompressor<BufReader<PyFileObject>>,
 }
 
 #[pymethods]
@@ -167,7 +167,7 @@ impl ParLasZipDecompressor {
         selection: Option<DecompressionSelection>,
     ) -> PyResult<Self> {
         Python::with_gil(|py| {
-            let source = BufReader::new(PyReadableFileObject::new(py, source)?);
+            let source = BufReader::new(PyFileObject::new(py, source)?);
             let vlr = laz::LazVlr::read_from(as_bytes(vlr_record_data)?).map_err(into_py_err)?;
 
             if let Some(selection) = selection {
@@ -207,7 +207,7 @@ impl ParLasZipDecompressor {
 
 #[pyclass]
 struct LasZipDecompressor {
-    decompressor: laz::LasZipDecompressor<'static, BufReader<PyReadableFileObject>>,
+    decompressor: laz::LasZipDecompressor<'static, BufReader<PyFileObject>>,
 }
 
 #[pymethods]
@@ -220,7 +220,7 @@ impl LasZipDecompressor {
         selection: Option<DecompressionSelection>,
     ) -> PyResult<Self> {
         Python::with_gil(|py| {
-            let source = BufReader::new(PyReadableFileObject::new(py, source)?);
+            let source = BufReader::new(PyFileObject::new(py, source)?);
             let vlr = laz::LazVlr::read_from(as_bytes(record_data)?).map_err(into_py_err)?;
 
             if let Some(selection) = selection {
@@ -283,14 +283,15 @@ impl LasZipDecompressor {
 
 #[pyclass]
 struct LasZipCompressor {
-    compressor: laz::LasZipCompressor<'static, BufWriter<PyWriteableFileObject>>,
+    compressor: laz::LasZipCompressor<'static, BufWriter<PyFileObject>>,
 }
 
 #[pymethods]
 impl LasZipCompressor {
     #[new]
     pub fn new(dest: pyo3::PyObject, vlr: &LazVlr) -> PyResult<Self> {
-        let dest = BufWriter::new(PyWriteableFileObject::new(dest)?);
+        let dest = Python::with_gil(|py| PyFileObject::new(py, dest))?;
+        let dest = BufWriter::new(dest);
         let compressor = laz::LasZipCompressor::new(dest, vlr.vlr.clone()).map_err(into_py_err)?;
         Ok(Self { compressor })
     }
@@ -427,7 +428,7 @@ fn compress_points(
 #[pyfunction]
 fn read_chunk_table(source: pyo3::PyObject, vlr: &LazVlr) -> pyo3::PyResult<pyo3::PyObject> {
     Python::with_gil(|py| {
-        let mut src = BufReader::new(PyReadableFileObject::new(py, source)?);
+        let mut src = BufReader::new(PyFileObject::new(py, source)?);
 
         let chunk_table =
             laz::laszip::ChunkTable::read_from(&mut src, &vlr.vlr).map_err(into_py_err)?;
@@ -450,7 +451,7 @@ fn read_chunk_table(source: pyo3::PyObject, vlr: &LazVlr) -> pyo3::PyResult<pyo3
 #[pyfunction]
 fn read_chunk_table_only(source: pyo3::PyObject, vlr: &LazVlr) -> pyo3::PyResult<pyo3::PyObject> {
     Python::with_gil(|py| {
-        let mut src = BufReader::new(PyReadableFileObject::new(py, source)?);
+        let mut src = BufReader::new(PyFileObject::new(py, source)?);
 
         let chunk_table = laz::laszip::ChunkTable::read(&mut src, vlr.uses_variable_size_chunks())
             .map_err(into_py_err)?;
@@ -484,8 +485,86 @@ fn write_chunk_table(
 ) -> pyo3::PyResult<()> {
     let chunk_table = chunk_table_from_py_list(py_chunk_table)?;
 
-    let dest = BufWriter::new(PyWriteableFileObject::new(dest)?);
+    let dest = Python::with_gil(|py| PyFileObject::new(py, dest).map(BufWriter::new))?;
     chunk_table.write_to(dest, &vlr.vlr).map_err(into_py_err)
+}
+
+#[pyclass]
+struct ParLasZipAppender {
+    appender: laz::ParLasZipAppender<BufReadWritePyFileObject>,
+}
+
+#[pymethods]
+impl ParLasZipAppender {
+    #[new]
+    fn new(dest: PyObject, laz_vlr_record_data: &PyAny) -> PyResult<Self> {
+        let data =
+            Python::with_gil(|py| PyFileObject::new(py, dest).map(BufReadWritePyFileObject::new))?;
+        let vlr = laz::LazVlr::read_from(as_bytes(laz_vlr_record_data)?).map_err(into_py_err)?;
+        let appender = laz::ParLasZipAppender::new(data, vlr).map_err(into_py_err)?;
+        Ok(ParLasZipAppender { appender })
+    }
+
+    fn compress_many(&mut self, points: &PyAny) -> PyResult<()> {
+        let point_bytes = as_bytes(points)?;
+
+        self.appender
+            .compress_many(point_bytes)
+            .map_err(into_py_err)
+    }
+
+    pub fn compress_chunks(&mut self, chunks: &PyList) -> PyResult<()> {
+        let chunks = chunks
+            .iter()
+            .map(as_bytes)
+            .collect::<PyResult<Vec<&[u8]>>>()?;
+        self.appender.compress_chunks(chunks)?;
+        Ok(())
+    }
+
+    fn done(&mut self) -> PyResult<()> {
+        self.appender.done().map_err(into_py_err)?;
+        self.appender.get_mut().flush().map_err(into_py_err)
+    }
+}
+
+#[pyclass]
+struct LasZipAppender {
+    appender: laz::LasZipAppender<'static, BufReadWritePyFileObject>,
+}
+
+#[pymethods]
+impl LasZipAppender {
+    #[new]
+    fn new(dest: PyObject, laz_vlr_record_data: &PyAny) -> PyResult<Self> {
+        let data =
+            Python::with_gil(|py| PyFileObject::new(py, dest).map(BufReadWritePyFileObject::new))?;
+        let vlr = laz::LazVlr::read_from(as_bytes(laz_vlr_record_data)?).map_err(into_py_err)?;
+        let appender = laz::LasZipAppender::new(data, vlr).map_err(into_py_err)?;
+        Ok(LasZipAppender { appender })
+    }
+
+    fn compress_many(&mut self, points: &PyAny) -> PyResult<()> {
+        let point_bytes = as_bytes(points)?;
+
+        self.appender
+            .compress_many(point_bytes)
+            .map_err(into_py_err)
+    }
+
+    pub fn compress_chunks(&mut self, chunks: &PyList) -> PyResult<()> {
+        let chunks = chunks
+            .iter()
+            .map(as_bytes)
+            .collect::<PyResult<Vec<&[u8]>>>()?;
+        self.appender.compress_chunks(chunks)?;
+        Ok(())
+    }
+
+    fn done(&mut self) -> PyResult<()> {
+        self.appender.done().map_err(into_py_err)?;
+        self.appender.get_mut().flush().map_err(into_py_err)
+    }
 }
 
 /// This module is a python module implemented in Rust.
@@ -501,8 +580,10 @@ fn lazrs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<LazVlr>()?;
     m.add_class::<LasZipDecompressor>()?;
     m.add_class::<LasZipCompressor>()?;
+    m.add_class::<LasZipAppender>()?;
     m.add_class::<ParLasZipCompressor>()?;
     m.add_class::<ParLasZipDecompressor>()?;
+    m.add_class::<ParLasZipAppender>()?;
     m.add_class::<DecompressionSelection>()?;
 
     m.add(
