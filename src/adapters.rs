@@ -1,8 +1,9 @@
 use std::io::SeekFrom;
+use std::os::raw::c_char;
 
 use pyo3::ffi::Py_ssize_t;
+use pyo3::types::{PyAnyMethods, PyBytesMethods};
 use pyo3::{IntoPy, PyResult, Python, ToPyObject};
-use std::os::raw::c_char;
 
 fn to_other_io_error(message: String) -> std::io::Error {
     std::io::Error::new(std::io::ErrorKind::Other, message)
@@ -12,7 +13,7 @@ fn py_seek_args_from_rust_seek(
     seek: SeekFrom,
     py: pyo3::Python,
 ) -> (pyo3::PyObject, pyo3::PyObject) {
-    let io_module = py.import("io").unwrap();
+    let io_module = py.import_bound("io").unwrap();
     match seek {
         SeekFrom::Start(n) => {
             let value: pyo3::PyObject = n.into_py(py);
@@ -86,7 +87,7 @@ impl std::io::Read for PyFileObject {
                         )
                     })?;
 
-                match object.downcast::<pyo3::types::PyBytes>(py) {
+                match object.downcast_bound::<pyo3::types::PyBytes>(py) {
                     Ok(py_bytes) => {
                         let read_bytes = py_bytes.as_bytes();
                         let shortest = std::cmp::min(buf.len(), read_bytes.len());
@@ -141,7 +142,7 @@ impl std::io::Seek for PyFileObject {
             let args = py_seek_args_from_rust_seek(pos, py);
             let new_pos = self
                 .file_obj
-                .call_method(py, "seek", args, None)
+                .call_method_bound(py, "seek", args, None)
                 .and_then(|py_long| py_long.extract::<u64>(py))
                 .map_err(|_err| to_other_io_error(format!("Failed to call seek")))?;
             Ok(new_pos)
