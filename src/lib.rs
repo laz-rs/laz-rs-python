@@ -64,6 +64,7 @@ impl LazVlr {
     }
 
     #[classmethod]
+    #[pyo3(signature = (point_format_id, num_extra_bytes, use_variable_size_chunks=false))]
     fn new_for_compression<'py>(
         _cls: &Bound<'py, PyType>,
         point_format_id: u8,
