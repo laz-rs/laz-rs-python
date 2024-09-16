@@ -69,13 +69,13 @@ impl LazVlr {
         _cls: &Bound<'py, PyType>,
         point_format_id: u8,
         num_extra_bytes: u16,
-        use_variable_size_chunks: Option<bool>,
+        use_variable_size_chunks: bool,
     ) -> PyResult<Self> {
         let mut builder = laz::LazVlrBuilder::default()
             .with_point_format(point_format_id, num_extra_bytes)
             .map_err(into_py_err)?;
 
-        if use_variable_size_chunks.unwrap_or(false) {
+        if use_variable_size_chunks {
             builder = builder.with_variable_chunk_size();
         }
 
