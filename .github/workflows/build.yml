@@ -24,8 +24,9 @@ jobs:
           args: --release --out dist --interpreter python${{ matrix.python-version }}
 
       # Upload the wheels of the build for manual download/inspection
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v4
         with:
+          name: binary-macos-x86_64-${{ matrix.python-version }}
           path: ./dist/*.whl
 
   macos-build-aarch64:
@@ -49,8 +50,9 @@ jobs:
           args: --release --out dist --interpreter python${{ matrix.python-version }}
 
       # Upload the wheels of the build for manual download/inspection
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v4
         with:
+          name: binary-macos-aarch64-${{ matrix.python-version }}
           path: ./dist/*.whl
 
 
@@ -87,8 +89,9 @@ jobs:
           args: --release --out dist
 
       # Upload the wheels of the build for manual download/inspection
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v4
         with:
+          name: binary-win-${{ matrix.arch }}-${{ matrix.python-version }}
           path: ./dist/*.whl
 
 
@@ -150,8 +153,9 @@ jobs:
 
 
       # Upload the wheels of the build for manual download/inspection
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v4
         with:
+          name: binary-linux-${{ matrix.target }}-${{ matrix.python.version }}
           path: ./dist/*.whl
 
   # sdist is needed for the conda recipe
@@ -171,7 +175,8 @@ jobs:
           args: --out dist
 
       # Upload the wheels of the build for manual download/inspection
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v4
         with:
+          name: sdist
           path: ./dist/*.tar.gz
 
