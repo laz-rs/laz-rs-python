@@ -8,7 +8,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-          python-version: [ '3.8', '3.9', '3.10', '3.11', '3.12' ]
+          python-version: [ '3.9', '3.10', '3.11', '3.12', '3.13' ]
     steps:
       - uses: actions/checkout@v1
 
@@ -34,7 +34,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [ '3.9', '3.10', '3.11', '3.12' ]
+        python-version: [ '3.9', '3.10', '3.11', '3.12', '3.13' ]
     steps:
       - uses: actions/checkout@v1
 
@@ -62,7 +62,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [ '3.8', '3.9', '3.10', '3.11', '3.12' ]
+        python-version: [ '3.9', '3.10', '3.11', '3.12', '3.13' ]
         arch: ['x86', 'x64']
 
     steps:
@@ -104,10 +104,6 @@ jobs:
         target: [x86_64, aarch64]
         python: [
           {
-            version: '3.8',
-            PYO3_CROSS_LIB_DIR: '/opt/python/cp38-cp38/lib'
-          },
-          {
             version: '3.9',
             PYO3_CROSS_LIB_DIR: '/opt/python/cp39-cp39/lib'
           },
@@ -122,6 +118,10 @@ jobs:
           {
             version: '3.12',
             PYO3_CROSS_LIB_DIR: '/opt/python/cp312-cp312/lib'
+          },
+          {
+            version: '3.13',
+            PYO3_CROSS_LIB_DIR: '/opt/python/cp313-cp313/lib'
           }
         ]
     steps:
@@ -141,7 +141,7 @@ jobs:
           args: --release --out dist --interpreter python${{ matrix.python.version }}
 
       - name: Build wheels
-        if: matrix.target == 'aarch64'
+        if: matrix.target == 'aarch64' && matrix.python.version != '3.13'
         uses: messense/maturin-action@v1
         env:
           PYO3_CROSS_LIB_DIR: '${{ matrix.python.PYO3_CROSS_LIB_DIR }}'
@@ -166,7 +166,7 @@ jobs:
 
       - uses: actions/setup-python@v4
         with:
-          python-version: ${{ matrix.python.version }}
+          python-version: 3.12
 
       - name: Build sdist
         uses: messense/maturin-action@v1
