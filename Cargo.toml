@@ -1,6 +1,6 @@
 [package]
 name = "lazrs"
-version = "0.6.2"
+version = "0.6.3"
 authors = ["tmontaigu <thomas.montaigu@laposte.net>"]
 edition = "2021"
 license = "MIT"

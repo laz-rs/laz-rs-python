@@ -1,9 +1,10 @@
 [project]
 name = "lazrs"
+version = "0.6.3"
 classifier = [
-    "Intended Audience :: Developers",
-    "Programming Language :: Python",
-    "Programming Language :: Rust",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python",
+  "Programming Language :: Rust",
 ]
 
 
