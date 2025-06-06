@@ -501,11 +501,15 @@ struct ParLasZipAppender {
 #[pymethods]
 impl ParLasZipAppender {
     #[new]
-    fn new<'py>(dest: PyObject, laz_vlr_record_data: &Bound<'py, PyAny>) -> PyResult<Self> {
+    fn new<'py>(
+        dest: PyObject,
+        laz_vlr_record_data: &Bound<'py, PyAny>,
+        point_count: u64,
+    ) -> PyResult<Self> {
         let data =
             Python::with_gil(|py| PyFileObject::new(py, dest).map(BufReadWritePyFileObject::new))?;
         let vlr = laz::LazVlr::read_from(as_bytes(laz_vlr_record_data)?).map_err(into_py_err)?;
-        let appender = laz::ParLasZipAppender::new(data, vlr).map_err(into_py_err)?;
+        let appender = laz::ParLasZipAppender::new(data, vlr, point_count).map_err(into_py_err)?;
         Ok(ParLasZipAppender { appender })
     }
 
@@ -540,11 +544,15 @@ struct LasZipAppender {
 #[pymethods]
 impl LasZipAppender {
     #[new]
-    fn new<'py>(dest: PyObject, laz_vlr_record_data: &Bound<'py, PyAny>) -> PyResult<Self> {
+    fn new<'py>(
+        dest: PyObject,
+        laz_vlr_record_data: &Bound<'py, PyAny>,
+        point_count: u64,
+    ) -> PyResult<Self> {
         let data =
             Python::with_gil(|py| PyFileObject::new(py, dest).map(BufReadWritePyFileObject::new))?;
         let vlr = laz::LazVlr::read_from(as_bytes(laz_vlr_record_data)?).map_err(into_py_err)?;
-        let appender = laz::LasZipAppender::new(data, vlr).map_err(into_py_err)?;
+        let appender = laz::LasZipAppender::new(data, vlr, point_count).map_err(into_py_err)?;
         Ok(LasZipAppender { appender })
     }
 
