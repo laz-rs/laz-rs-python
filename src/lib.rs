@@ -3,14 +3,14 @@ use std::io::{BufReader, BufWriter, Read, Write};
 use adapters::{BufReadWritePyFileObject, PyFileObject};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyBytes, PyList, PyType};
-use pyo3::{create_exception, wrap_pyfunction};
+use pyo3::{create_exception, wrap_pyfunction, IntoPyObjectExt};
 
 mod adapters;
 
 create_exception!(lazrs, LazrsError, pyo3::exceptions::PyRuntimeError);
 
 fn as_bytes<'py>(object: &Bound<'py, PyAny>) -> PyResult<&'py [u8]> {
-    let buffer = pyo3::buffer::PyBuffer::<u8>::get_bound(object)?;
+    let buffer = pyo3::buffer::PyBuffer::<u8>::get(object)?;
 
     let slc =
         unsafe { std::slice::from_raw_parts(buffer.buf_ptr() as *const u8, buffer.len_bytes()) };
@@ -19,7 +19,7 @@ fn as_bytes<'py>(object: &Bound<'py, PyAny>) -> PyResult<&'py [u8]> {
 }
 
 fn as_mut_bytes<'py>(object: &Bound<'py, PyAny>) -> PyResult<&'py mut [u8]> {
-    let buffer = pyo3::buffer::PyBuffer::<u8>::get_bound(object)?;
+    let buffer = pyo3::buffer::PyBuffer::<u8>::get(object)?;
 
     if buffer.readonly() {
         return Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
@@ -102,7 +102,7 @@ impl LazVlr {
             .map_err(|e| PyErr::new::<LazrsError, String>(format!("{}", e)))?;
 
         Python::with_gil(|py| {
-            let bytes = PyBytes::new_bound(py, data.get_ref()).to_object(py);
+            let bytes = PyBytes::new(py, data.get_ref()).into_py_any(py)?;
             Ok(bytes)
         })
     }
@@ -269,8 +269,8 @@ impl LasZipDecompressor {
                 .as_ref()
                 .iter()
                 .map(|entry| (entry.point_count, entry.byte_count));
-            let list = PyList::new_bound(py, elements);
-            Ok(list.to_object(py))
+            let list = PyList::new(py, elements)?;
+            Ok(list.into_py_any(py)?)
         })
     }
 
@@ -414,7 +414,7 @@ fn compress_points<'py>(
         .map_err(|e| PyErr::new::<LazrsError, String>(format!("{}", e)))?;
     }
     Python::with_gil(|py| {
-        let bytes = PyBytes::new_bound(py, compression_result.get_ref()).to_object(py);
+        let bytes = PyBytes::new(py, compression_result.get_ref()).into_py_any(py)?;
         Ok(bytes)
     })
 }
@@ -438,8 +438,8 @@ fn read_chunk_table(source: pyo3::PyObject, vlr: &LazVlr) -> pyo3::PyResult<pyo3
             .as_ref()
             .iter()
             .map(|entry| (entry.point_count, entry.byte_count));
-        let list = pyo3::types::PyList::new_bound(py, elements);
-        Ok(list.to_object(py))
+        let list = pyo3::types::PyList::new(py, elements)?;
+        Ok(list.into_py_any(py)?)
     })
 }
 
@@ -461,8 +461,8 @@ fn read_chunk_table_only(source: pyo3::PyObject, vlr: &LazVlr) -> pyo3::PyResult
             .as_ref()
             .iter()
             .map(|entry| (entry.point_count, entry.byte_count));
-        let list = pyo3::types::PyList::new_bound(py, elements);
-        Ok(list.to_object(py))
+        let list = pyo3::types::PyList::new(py, elements)?;
+        Ok(list.into_py_any(py)?)
     })
 }
 
@@ -588,7 +588,7 @@ fn lazrs<'py>(py: Python, m: &Bound<'py, PyModule>) -> PyResult<()> {
     m.add_wrapped(wrap_pyfunction!(read_chunk_table_only))?;
     m.add_wrapped(wrap_pyfunction!(write_chunk_table))?;
     m.add_wrapped(wrap_pyfunction!(decompress_points_with_chunk_table))?;
-    m.add("LazrsError", py.get_type_bound::<LazrsError>())?;
+    m.add("LazrsError", py.get_type::<LazrsError>())?;
     m.add_class::<LazVlr>()?;
     m.add_class::<LasZipDecompressor>()?;
     m.add_class::<LasZipCompressor>()?;

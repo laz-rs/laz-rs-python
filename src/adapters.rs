@@ -3,7 +3,7 @@ use std::os::raw::c_char;
 
 use pyo3::ffi::Py_ssize_t;
 use pyo3::types::{PyAnyMethods, PyBytesMethods};
-use pyo3::{IntoPy, PyResult, Python, ToPyObject};
+use pyo3::{IntoPyObjectExt, PyResult, Python};
 
 fn to_other_io_error(message: String) -> std::io::Error {
     std::io::Error::new(std::io::ErrorKind::Other, message)
@@ -12,20 +12,20 @@ fn to_other_io_error(message: String) -> std::io::Error {
 fn py_seek_args_from_rust_seek(
     seek: SeekFrom,
     py: pyo3::Python,
-) -> (pyo3::PyObject, pyo3::PyObject) {
-    let io_module = py.import_bound("io").unwrap();
+) -> PyResult<(pyo3::PyObject, pyo3::PyObject)> {
+    let io_module = py.import("io")?;
     match seek {
         SeekFrom::Start(n) => {
-            let value: pyo3::PyObject = n.into_py(py);
-            (value, io_module.getattr("SEEK_SET").unwrap().to_object(py))
+            let value: pyo3::PyObject = n.into_py_any(py)?;
+            Ok((value, io_module.getattr("SEEK_SET")?.into_py_any(py)?))
         }
         SeekFrom::End(n) => {
-            let value: pyo3::PyObject = n.into_py(py);
-            (value, io_module.getattr("SEEK_END").unwrap().to_object(py))
+            let value: pyo3::PyObject = n.into_py_any(py)?;
+            Ok((value, io_module.getattr("SEEK_END")?.into_py_any(py)?))
         }
         SeekFrom::Current(n) => {
-            let value: pyo3::PyObject = n.into_py(py);
-            (value, io_module.getattr("SEEK_CUR").unwrap().to_object(py))
+            let value: pyo3::PyObject = n.into_py_any(py)?;
+            Ok((value, io_module.getattr("SEEK_CUR")?.into_py_any(py)?))
         }
     }
 }
@@ -73,7 +73,7 @@ impl std::io::Read for PyFileObject {
                         to_other_io_error(format!("Failed to use readinto to read bytes"))
                     })
             } else {
-                let num_bytes_to_read: pyo3::PyObject = buf.len().into_py(py);
+                let num_bytes_to_read: pyo3::PyObject = buf.len().into_py_any(py)?;
 
                 let object = self
                     .read_fn
@@ -139,10 +139,10 @@ impl std::io::Write for PyFileObject {
 impl std::io::Seek for PyFileObject {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
         Python::with_gil(|py| {
-            let args = py_seek_args_from_rust_seek(pos, py);
+            let args = py_seek_args_from_rust_seek(pos, py)?;
             let new_pos = self
                 .file_obj
-                .call_method_bound(py, "seek", args, None)
+                .call_method(py, "seek", args, None)
                 .and_then(|py_long| py_long.extract::<u64>(py))
                 .map_err(|_err| to_other_io_error(format!("Failed to call seek")))?;
             Ok(new_pos)
