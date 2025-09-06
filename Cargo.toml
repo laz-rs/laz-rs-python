@@ -1,6 +1,6 @@
 [package]
 name = "lazrs"
-version = "0.7.0"
+version = "0.8.0"
 authors = ["tmontaigu <thomas.montaigu@laposte.net>"]
 edition = "2021"
 license = "MIT"
@@ -12,9 +12,9 @@ name = "lazrs"
 crate-type = ["cdylib"]
 
 [dependencies.laz]
-version = "0.10.0"
+version = "0.11.0"
 features = ["parallel"]
 
 [dependencies.pyo3]
-version = "0.22.2"
+version = "0.26.0"
 features = ["extension-module", "py-clone"]

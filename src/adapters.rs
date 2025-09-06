@@ -3,7 +3,7 @@ use std::os::raw::c_char;
 
 use pyo3::ffi::Py_ssize_t;
 use pyo3::types::{PyAnyMethods, PyBytesMethods};
-use pyo3::{IntoPy, PyResult, Python, ToPyObject};
+use pyo3::{IntoPyObject, PyAny, PyResult, Python};
 
 fn to_other_io_error(message: String) -> std::io::Error {
     std::io::Error::new(std::io::ErrorKind::Other, message)
@@ -12,34 +12,58 @@ fn to_other_io_error(message: String) -> std::io::Error {
 fn py_seek_args_from_rust_seek(
     seek: SeekFrom,
     py: pyo3::Python,
-) -> (pyo3::PyObject, pyo3::PyObject) {
-    let io_module = py.import_bound("io").unwrap();
+) -> (pyo3::Py<PyAny>, pyo3::Py<PyAny>) {
+    let io_module = py.import("io").unwrap();
     match seek {
         SeekFrom::Start(n) => {
-            let value: pyo3::PyObject = n.into_py(py);
-            (value, io_module.getattr("SEEK_SET").unwrap().to_object(py))
+            let value: pyo3::Py<PyAny> = n.into_pyobject(py).unwrap().into_any().unbind();
+            (
+                value,
+                io_module
+                    .getattr("SEEK_SET")
+                    .unwrap()
+                    .into_pyobject(py)
+                    .unwrap()
+                    .unbind(),
+            )
         }
         SeekFrom::End(n) => {
-            let value: pyo3::PyObject = n.into_py(py);
-            (value, io_module.getattr("SEEK_END").unwrap().to_object(py))
+            let value: pyo3::Py<PyAny> = n.into_pyobject(py).unwrap().into_any().unbind();
+            (
+                value,
+                io_module
+                    .getattr("SEEK_END")
+                    .unwrap()
+                    .into_pyobject(py)
+                    .unwrap()
+                    .unbind(),
+            )
         }
         SeekFrom::Current(n) => {
-            let value: pyo3::PyObject = n.into_py(py);
-            (value, io_module.getattr("SEEK_CUR").unwrap().to_object(py))
+            let value: pyo3::Py<PyAny> = n.into_pyobject(py).unwrap().into_any().unbind();
+            (
+                value,
+                io_module
+                    .getattr("SEEK_CUR")
+                    .unwrap()
+                    .into_pyobject(py)
+                    .unwrap()
+                    .unbind(),
+            )
         }
     }
 }
 
 #[derive(Clone)]
 pub(crate) struct PyFileObject {
-    file_obj: pyo3::PyObject,
-    write_fn: Option<pyo3::PyObject>,
-    read_fn: Option<pyo3::PyObject>,
-    readinto_fn: Option<pyo3::PyObject>,
+    file_obj: pyo3::Py<PyAny>,
+    write_fn: Option<pyo3::Py<PyAny>>,
+    read_fn: Option<pyo3::Py<PyAny>>,
+    readinto_fn: Option<pyo3::Py<PyAny>>,
 }
 
 impl PyFileObject {
-    pub(crate) fn new(py: pyo3::Python, file_obj: pyo3::PyObject) -> PyResult<Self> {
+    pub(crate) fn new(py: pyo3::Python, file_obj: pyo3::Py<PyAny>) -> PyResult<Self> {
         let write_fn = file_obj.getattr(py, "write").ok();
         let read_fn = file_obj.getattr(py, "read").ok();
         let readinto_fn = file_obj.getattr(py, "readinto").ok();
@@ -55,7 +79,7 @@ impl PyFileObject {
 
 impl std::io::Read for PyFileObject {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             if let Some(ref readinto) = self.readinto_fn {
                 let memview = unsafe {
                     let view_object = pyo3::ffi::PyMemoryView_FromMemory(
@@ -64,26 +88,27 @@ impl std::io::Read for PyFileObject {
                         pyo3::ffi::PyBUF_WRITE,
                     );
 
-                    pyo3::PyObject::from_owned_ptr(py, view_object)
+                    pyo3::Py::<PyAny>::from_owned_ptr(py, view_object)
                 };
                 readinto
                     .call1(py, (memview,))
                     .and_then(|num_bytes_read| num_bytes_read.extract::<usize>(py))
                     .map_err(|_err| {
-                        to_other_io_error(format!("Failed to use readinto to read bytes"))
+                        to_other_io_error("Failed to use readinto to read bytes".to_string())
                     })
             } else {
-                let num_bytes_to_read: pyo3::PyObject = buf.len().into_py(py);
+                let num_bytes_to_read: pyo3::Py<PyAny> =
+                    buf.len().into_pyobject(py).unwrap().into_any().unbind();
 
                 let object = self
                     .read_fn
                     .as_ref()
-                    .ok_or_else(|| to_other_io_error(format!("Ne read method on file object")))?
+                    .ok_or_else(|| to_other_io_error("No read method on file object".to_string()))?
                     .call1(py, (num_bytes_to_read,))
                     .map_err(|_err| {
                         std::io::Error::new(
                             std::io::ErrorKind::Other,
-                            format!("Failed to call read"),
+                            "Failed to call read".to_string(),
                         )
                     })?;
 
@@ -96,7 +121,7 @@ impl std::io::Read for PyFileObject {
                     }
                     Err(_) => Err(std::io::Error::new(
                         std::io::ErrorKind::Other,
-                        format!("read did not return bytes"),
+                        "read did not return bytes".to_string(),
                     )),
                 }
             }
@@ -106,7 +131,7 @@ impl std::io::Read for PyFileObject {
 
 impl std::io::Write for PyFileObject {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let memview = unsafe {
                 let view_object = pyo3::ffi::PyMemoryView_FromMemory(
                     buf.as_ptr() as *mut c_char,
@@ -114,23 +139,23 @@ impl std::io::Write for PyFileObject {
                     pyo3::ffi::PyBUF_READ,
                 );
 
-                pyo3::PyObject::from_owned_ptr(py, view_object)
+                pyo3::Py::<PyAny>::from_owned_ptr(py, view_object)
             };
 
             self.write_fn
                 .as_ref()
-                .ok_or_else(|| to_other_io_error(format!("Ne read method on file object")))?
+                .ok_or_else(|| to_other_io_error("Ne read method on file object".to_string()))?
                 .call1(py, (memview,))
                 .and_then(|ret_val| ret_val.extract::<usize>(py))
-                .map_err(|_err| to_other_io_error(format!("Failed to call write")))
+                .map_err(|_err| to_other_io_error("Failed to call write".to_string()))
         })
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             self.file_obj
                 .call_method0(py, "flush")
-                .map_err(|_err| to_other_io_error(format!("Failed to call flush")))?;
+                .map_err(|_err| to_other_io_error("Failed to call flush".to_string()))?;
             Ok(())
         })
     }
@@ -138,13 +163,13 @@ impl std::io::Write for PyFileObject {
 
 impl std::io::Seek for PyFileObject {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
-        Python::with_gil(|py| {
+        Python::attach(|py| {
             let args = py_seek_args_from_rust_seek(pos, py);
             let new_pos = self
                 .file_obj
-                .call_method_bound(py, "seek", args, None)
+                .call_method(py, "seek", args, None)
                 .and_then(|py_long| py_long.extract::<u64>(py))
-                .map_err(|_err| to_other_io_error(format!("Failed to call seek")))?;
+                .map_err(|_err| to_other_io_error("Failed to call seek".to_string()))?;
             Ok(new_pos)
         })
     }
