@@ -1,6 +1,6 @@
 [project]
 name = "lazrs"
-version = "0.7.0"
+version = "0.8.0"
 classifier = [
   "Intended Audience :: Developers",
   "Programming Language :: Python",
