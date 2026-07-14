@@ -88,7 +88,7 @@ impl std::io::Read for PyFileObject {
                         pyo3::ffi::PyBUF_WRITE,
                     );
 
-                    pyo3::Py::<PyAny>::from_owned_ptr(py, view_object)
+                    pyo3::Bound::from_owned_ptr(py, view_object)
                 };
                 readinto
                     .call1(py, (memview,))
@@ -139,7 +139,7 @@ impl std::io::Write for PyFileObject {
                     pyo3::ffi::PyBUF_READ,
                 );
 
-                pyo3::Py::<PyAny>::from_owned_ptr(py, view_object)
+                pyo3::Bound::from_owned_ptr(py, view_object)
             };
 
             self.write_fn

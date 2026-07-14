@@ -37,7 +37,7 @@ fn into_py_err<T: std::fmt::Display>(error: T) -> PyErr {
     PyErr::new::<LazrsError, _>(format!("{}", error))
 }
 
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Copy, Clone, Debug)]
 struct DecompressionSelection(laz::DecompressionSelection);
 
