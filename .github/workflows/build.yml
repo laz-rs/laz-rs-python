@@ -150,6 +150,10 @@ jobs:
         env:
           PYO3_CROSS_LIB_DIR: '${{ matrix.python.PYO3_CROSS_LIB_DIR }}'
         with:
+          # maturin >=1.12 parses the target's PEP 739 build-details.json, but the
+          # cp314 file in the manylinux images lacks the required abi.extension_suffix
+          # field. Pin below 1.12 so cross-compiling uses _sysconfigdata instead.
+          maturin-version: v1.11.5
           target: ${{ matrix.target }}
           command: build
           manylinux: auto
