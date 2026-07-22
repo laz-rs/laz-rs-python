@@ -10,21 +10,21 @@ jobs:
       matrix:
           python-version: [ '3.9', '3.10', '3.11', '3.12', '3.13', '3.14' ]
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Build wheels
-        uses: messense/maturin-action@v1
+        uses: messense/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           target: x86_64-apple-darwin
           command: build
           args: --release --out dist --interpreter python${{ matrix.python-version }}
 
       # Upload the wheels of the build for manual download/inspection
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: binary-macos-x86_64-${{ matrix.python-version }}
           path: ./dist/*.whl
@@ -36,21 +36,21 @@ jobs:
       matrix:
         python-version: [ '3.9', '3.10', '3.11', '3.12', '3.13', '3.14' ]
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Build wheels
-        uses: messense/maturin-action@v1
+        uses: messense/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           target: aarch64-apple-darwin
           command: build
           args: --release --out dist --interpreter python${{ matrix.python-version }}
 
       # Upload the wheels of the build for manual download/inspection
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: binary-macos-aarch64-${{ matrix.python-version }}
           path: ./dist/*.whl
@@ -66,30 +66,30 @@ jobs:
         arch: ['x86', 'x64']
 
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
           architecture: ${{ matrix.arch }}
 
       - name: Build wheels
         if: matrix.arch == 'x86'
-        uses: messense/maturin-action@v1
+        uses: messense/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           command: build
           args: --release --out dist --target i686-pc-windows-msvc
 
       - name: Build wheels
         if: matrix.arch == 'x64'
-        uses: messense/maturin-action@v1
+        uses: messense/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           command: build
           args: --release --out dist
 
       # Upload the wheels of the build for manual download/inspection
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: binary-win-${{ matrix.arch }}-${{ matrix.python-version }}
           path: ./dist/*.whl
@@ -129,15 +129,15 @@ jobs:
           }
         ]
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python.version }}
 
       - name: Build wheels
         if: matrix.target == 'x86_64'
-        uses: messense/maturin-action@v1
+        uses: messense/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           target: ${{ matrix.target }}
           command: build
@@ -146,7 +146,7 @@ jobs:
 
       - name: Build wheels
         if: matrix.target == 'aarch64' && matrix.python.version != '3.13'
-        uses: messense/maturin-action@v1
+        uses: messense/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         env:
           PYO3_CROSS_LIB_DIR: '${{ matrix.python.PYO3_CROSS_LIB_DIR }}'
         with:
@@ -157,7 +157,7 @@ jobs:
 
 
       # Upload the wheels of the build for manual download/inspection
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: binary-linux-${{ matrix.target }}-${{ matrix.python.version }}
           path: ./dist/*.whl
@@ -166,20 +166,20 @@ jobs:
   sdist:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: 3.12
 
       - name: Build sdist
-        uses: messense/maturin-action@v1
+        uses: messense/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           command: sdist
           args: --out dist
 
       # Upload the wheels of the build for manual download/inspection
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: sdist
           path: ./dist/*.tar.gz
@@ -189,7 +189,7 @@ jobs:
     needs: [linux-build, windows-build, macos-build-aarch64, macos-build-x86_64]
     steps:
       - name: Merge Artifacts
-        uses: actions/upload-artifact/merge@v4
+        uses: actions/upload-artifact/merge@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: all-wheels
           pattern: binary-*
