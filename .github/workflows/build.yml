@@ -145,7 +145,7 @@ jobs:
           args: --release --out dist --interpreter python${{ matrix.python.version }}
 
       - name: Build wheels
-        if: matrix.target == 'aarch64' && matrix.python.version != '3.13'
+        if: matrix.target == 'aarch64'
         uses: messense/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         env:
           PYO3_CROSS_LIB_DIR: '${{ matrix.python.PYO3_CROSS_LIB_DIR }}'
