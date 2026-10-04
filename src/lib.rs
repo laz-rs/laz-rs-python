@@ -582,7 +582,7 @@ impl LasZipAppender {
 }
 
 /// This module is a python module implemented in Rust.
-#[pymodule]
+#[pymodule(gil_used = false)]
 fn lazrs<'py>(py: Python, m: &Bound<'py, PyModule>) -> PyResult<()> {
     m.add_wrapped(wrap_pyfunction!(decompress_points))?;
     m.add_wrapped(wrap_pyfunction!(compress_points))?;
