@@ -1,6 +1,8 @@
 use std::io::{BufReader, BufWriter, Read, Write};
 
 use adapters::{BufReadWritePyFileObject, PyFileObject};
+use pyo3::buffer::PyBuffer;
+use pyo3::exceptions::{PyBufferError, PyTypeError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyBytes, PyList, PyType};
 use pyo3::{create_exception, wrap_pyfunction};
@@ -9,28 +11,62 @@ mod adapters;
 
 create_exception!(lazrs, LazrsError, pyo3::exceptions::PyRuntimeError);
 
-fn as_bytes<'py>(object: &Bound<'py, PyAny>) -> PyResult<&'py [u8]> {
-    let buffer = pyo3::buffer::PyBuffer::<u8>::get(object)?;
+/// Read-only view on the memory of a Python object implementing the buffer protocol.
+///
+/// The buffer export is held as long as the view lives: the object is kept alive
+/// and cannot be resized, so slices borrowed from the view stay valid.
+struct BufferView(PyBuffer<u8>);
 
-    let slc =
-        unsafe { std::slice::from_raw_parts(buffer.buf_ptr() as *const u8, buffer.len_bytes()) };
-
-    Ok(slc)
-}
-
-fn as_mut_bytes<'py>(object: &Bound<'py, PyAny>) -> PyResult<&'py mut [u8]> {
-    let buffer = pyo3::buffer::PyBuffer::<u8>::get(object)?;
-
-    if buffer.readonly() {
-        return Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
-            "buffer is readonly",
-        ));
+impl BufferView {
+    fn new(object: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let buffer = PyBuffer::<u8>::get(object)?;
+        if !buffer.is_c_contiguous() {
+            return Err(PyBufferError::new_err("buffer is not C-contiguous"));
+        }
+        Ok(Self(buffer))
     }
 
-    let slc =
-        unsafe { std::slice::from_raw_parts_mut(buffer.buf_ptr() as *mut u8, buffer.len_bytes()) };
+    fn as_slice<'a>(&'a self, py: Python<'a>) -> &'a [u8] {
+        let cells = self.0.as_slice(py).expect("contiguity is checked in new");
+        // SAFETY: ReadOnlyCell<u8> has the same layout as u8, and the export is held
+        // for 'a so the memory cannot be freed or resized.
+        // The buffer protocol cannot prevent other code from writing to the memory
+        // through another view, callers must not do that while lazrs uses the buffer.
+        unsafe { std::slice::from_raw_parts(cells.as_ptr().cast::<u8>(), cells.len()) }
+    }
+}
 
-    Ok(slc)
+/// Writable view on the memory of a Python object implementing the buffer protocol.
+///
+/// See [`BufferView`].
+struct BufferViewMut(PyBuffer<u8>);
+
+impl BufferViewMut {
+    fn new(object: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let buffer = PyBuffer::<u8>::get(object)?;
+        if buffer.readonly() {
+            return Err(PyTypeError::new_err("buffer is readonly"));
+        }
+        if !buffer.is_c_contiguous() {
+            return Err(PyBufferError::new_err("buffer is not C-contiguous"));
+        }
+        Ok(Self(buffer))
+    }
+
+    fn as_mut_slice<'a>(&'a mut self, py: Python<'a>) -> &'a mut [u8] {
+        let cells = self
+            .0
+            .as_mut_slice(py)
+            .expect("writability and contiguity are checked in new");
+        // SAFETY: Cell<u8> has the same layout as u8, and the export is held
+        // for 'a so the memory cannot be freed or resized.
+        // Taking &mut self prevents getting two slices from the same view, but not from
+        // two views on the same object, nor writes from other code through another view.
+        // Callers must not access the buffer while lazrs writes into it.
+        unsafe {
+            std::slice::from_raw_parts_mut(cells.as_ptr().cast_mut().cast::<u8>(), cells.len())
+        }
+    }
 }
 
 fn into_py_err<T: std::fmt::Display>(error: T) -> PyErr {
@@ -58,8 +94,9 @@ struct LazVlr {
 impl LazVlr {
     #[new]
     fn new<'py>(record_data: &Bound<'py, PyAny>) -> PyResult<Self> {
-        let vlr_data = as_bytes(record_data)?;
-        let vlr = laz::LazVlr::read_from(vlr_data).map_err(into_py_err)?;
+        let vlr_data = BufferView::new(record_data)?;
+        let vlr =
+            laz::LazVlr::read_from(vlr_data.as_slice(record_data.py())).map_err(into_py_err)?;
         Ok(LazVlr { vlr })
     }
 
@@ -132,18 +169,23 @@ impl ParLasZipCompressor {
     }
 
     fn compress_many<'py>(&mut self, points: &Bound<'py, PyAny>) -> PyResult<()> {
-        let point_bytes = as_bytes(points)?;
+        let point_bytes = BufferView::new(points)?;
 
         self.compressor
-            .compress_many(point_bytes)
+            .compress_many(point_bytes.as_slice(points.py()))
             .map_err(into_py_err)
     }
 
     pub fn compress_chunks<'py>(&mut self, chunks: &Bound<'py, PyList>) -> PyResult<()> {
-        let chunks = chunks
+        let py = chunks.py();
+        let views = chunks
             .iter()
-            .map(|chunk| as_bytes(&chunk))
-            .collect::<PyResult<Vec<&[u8]>>>()?;
+            .map(|chunk| BufferView::new(&chunk))
+            .collect::<PyResult<Vec<BufferView>>>()?;
+        let chunks = views
+            .iter()
+            .map(|view| view.as_slice(py))
+            .collect::<Vec<&[u8]>>();
         self.compressor.compress_chunks(chunks)?;
         Ok(())
     }
@@ -170,7 +212,8 @@ impl ParLasZipDecompressor {
     ) -> PyResult<Self> {
         Python::attach(|py| {
             let source = BufReader::new(PyFileObject::new(py, source)?);
-            let vlr = laz::LazVlr::read_from(as_bytes(vlr_record_data)?).map_err(into_py_err)?;
+            let vlr_data = BufferView::new(vlr_record_data)?;
+            let vlr = laz::LazVlr::read_from(vlr_data.as_slice(py)).map_err(into_py_err)?;
 
             if let Some(selection) = selection {
                 Ok(ParLasZipDecompressor {
@@ -187,9 +230,9 @@ impl ParLasZipDecompressor {
     }
 
     fn decompress_many<'py>(&mut self, points: &Bound<'py, PyAny>) -> PyResult<()> {
-        let points = as_mut_bytes(points)?;
+        let mut point_bytes = BufferViewMut::new(points)?;
         self.decompressor
-            .decompress_many(points)
+            .decompress_many(point_bytes.as_mut_slice(points.py()))
             .map_err(into_py_err)?;
         Ok(())
     }
@@ -199,10 +242,10 @@ impl ParLasZipDecompressor {
     }
 
     pub fn read_raw_bytes_into<'py>(&mut self, bytes: &Bound<'py, PyAny>) -> PyResult<()> {
-        let slc = as_mut_bytes(bytes)?;
+        let mut view = BufferViewMut::new(bytes)?;
         self.decompressor
             .get_mut()
-            .read_exact(slc)
+            .read_exact(view.as_mut_slice(bytes.py()))
             .map_err(into_py_err)
     }
 }
@@ -223,7 +266,8 @@ impl LasZipDecompressor {
     ) -> PyResult<Self> {
         Python::attach(|py| {
             let source = BufReader::new(PyFileObject::new(py, source)?);
-            let vlr = laz::LazVlr::read_from(as_bytes(record_data)?).map_err(into_py_err)?;
+            let vlr_data = BufferView::new(record_data)?;
+            let vlr = laz::LazVlr::read_from(vlr_data.as_slice(py)).map_err(into_py_err)?;
 
             if let Some(selection) = selection {
                 Ok(Self {
@@ -239,9 +283,9 @@ impl LasZipDecompressor {
     }
 
     pub fn decompress_many<'py>(&mut self, dest: &Bound<'py, PyAny>) -> PyResult<()> {
-        let slc = as_mut_bytes(dest)?;
+        let mut view = BufferViewMut::new(dest)?;
         self.decompressor
-            .decompress_many(slc)
+            .decompress_many(view.as_mut_slice(dest.py()))
             .map_err(|e| PyErr::new::<LazrsError, String>(format!("{}", e)))
     }
 
@@ -275,10 +319,10 @@ impl LasZipDecompressor {
     }
 
     pub fn read_raw_bytes_into<'py>(&mut self, bytes: &Bound<'py, PyAny>) -> PyResult<()> {
-        let slc = as_mut_bytes(bytes)?;
+        let mut view = BufferViewMut::new(bytes)?;
         self.decompressor
             .get_mut()
-            .read_exact(slc)
+            .read_exact(view.as_mut_slice(bytes.py()))
             .map_err(into_py_err)
     }
 }
@@ -306,8 +350,9 @@ impl LasZipCompressor {
     }
 
     pub fn compress_many<'py>(&mut self, points: &Bound<'py, PyAny>) -> PyResult<()> {
+        let point_bytes = BufferView::new(points)?;
         self.compressor
-            .compress_many(as_bytes(points)?)
+            .compress_many(point_bytes.as_slice(points.py()))
             .map_err(into_py_err)
     }
 
@@ -336,11 +381,14 @@ fn decompress_points<'py>(
     decompression_output: &Bound<'py, PyAny>,
     parallel: bool,
 ) -> PyResult<()> {
-    let vlr_data = as_bytes(laszip_vlr_record_data)?;
-    let data_slc = as_bytes(compressed_points_data)?;
-    let output = as_mut_bytes(decompression_output)?;
+    let py = decompression_output.py();
+    let vlr_data = BufferView::new(laszip_vlr_record_data)?;
+    let data = BufferView::new(compressed_points_data)?;
+    let mut output_view = BufferViewMut::new(decompression_output)?;
+    let data_slc = data.as_slice(py);
+    let output = output_view.as_mut_slice(py);
 
-    laz::LazVlr::read_from(vlr_data)
+    laz::LazVlr::read_from(vlr_data.as_slice(py))
         .and_then(|vlr| {
             if !parallel {
                 laz::decompress_buffer(data_slc, output, vlr)
@@ -367,12 +415,15 @@ fn decompress_points_with_chunk_table<'py>(
     py_chunk_table: &Bound<'py, PyList>,
     selection: Option<DecompressionSelection>,
 ) -> PyResult<()> {
-    let vlr_data = as_bytes(laszip_vlr_record_data)?;
-    let data_slc = as_bytes(compressed_points_data)?;
-    let output = as_mut_bytes(decompression_output)?;
+    let py = decompression_output.py();
+    let vlr_data = BufferView::new(laszip_vlr_record_data)?;
+    let data = BufferView::new(compressed_points_data)?;
+    let mut output_view = BufferViewMut::new(decompression_output)?;
     let chunk_table = chunk_table_from_py_list(py_chunk_table)?;
+    let data_slc = data.as_slice(py);
+    let output = output_view.as_mut_slice(py);
 
-    laz::LazVlr::read_from(vlr_data)
+    laz::LazVlr::read_from(vlr_data.as_slice(py))
         .and_then(|vlr| {
             if let Some(selection) = selection {
                 laz::par_decompress_selective(
@@ -397,21 +448,15 @@ fn compress_points<'py>(
     uncompressed_points: &Bound<'py, PyAny>,
     parallel: bool,
 ) -> PyResult<Py<PyAny>> {
+    let point_bytes = BufferView::new(uncompressed_points)?;
+    let point_bytes = point_bytes.as_slice(uncompressed_points.py());
     let mut compression_result = std::io::Cursor::new(Vec::<u8>::new());
     if !parallel {
-        laz::compress_buffer(
-            &mut compression_result,
-            as_bytes(uncompressed_points)?,
-            laszip_vlr.vlr.clone(),
-        )
-        .map_err(|e| PyErr::new::<LazrsError, String>(format!("{}", e)))?;
+        laz::compress_buffer(&mut compression_result, point_bytes, laszip_vlr.vlr.clone())
+            .map_err(|e| PyErr::new::<LazrsError, String>(format!("{}", e)))?;
     } else {
-        laz::par_compress_buffer(
-            &mut compression_result,
-            as_bytes(uncompressed_points)?,
-            &laszip_vlr.vlr,
-        )
-        .map_err(|e| PyErr::new::<LazrsError, String>(format!("{}", e)))?;
+        laz::par_compress_buffer(&mut compression_result, point_bytes, &laszip_vlr.vlr)
+            .map_err(|e| PyErr::new::<LazrsError, String>(format!("{}", e)))?;
     }
     Python::attach(|py| {
         let bytes = PyBytes::new(py, compression_result.get_ref())
@@ -510,24 +555,31 @@ impl ParLasZipAppender {
     ) -> PyResult<Self> {
         let data =
             Python::attach(|py| PyFileObject::new(py, dest).map(BufReadWritePyFileObject::new))?;
-        let vlr = laz::LazVlr::read_from(as_bytes(laz_vlr_record_data)?).map_err(into_py_err)?;
+        let vlr_data = BufferView::new(laz_vlr_record_data)?;
+        let vlr = laz::LazVlr::read_from(vlr_data.as_slice(laz_vlr_record_data.py()))
+            .map_err(into_py_err)?;
         let appender = laz::ParLasZipAppender::new(data, vlr, point_count).map_err(into_py_err)?;
         Ok(ParLasZipAppender { appender })
     }
 
     fn compress_many<'py>(&mut self, points: &Bound<'py, PyAny>) -> PyResult<()> {
-        let point_bytes = as_bytes(points)?;
+        let point_bytes = BufferView::new(points)?;
 
         self.appender
-            .compress_many(point_bytes)
+            .compress_many(point_bytes.as_slice(points.py()))
             .map_err(into_py_err)
     }
 
     pub fn compress_chunks<'py>(&mut self, chunks: &Bound<'py, PyList>) -> PyResult<()> {
-        let chunks = chunks
+        let py = chunks.py();
+        let views = chunks
             .iter()
-            .map(|chunk| as_bytes(&chunk))
-            .collect::<PyResult<Vec<&[u8]>>>()?;
+            .map(|chunk| BufferView::new(&chunk))
+            .collect::<PyResult<Vec<BufferView>>>()?;
+        let chunks = views
+            .iter()
+            .map(|view| view.as_slice(py))
+            .collect::<Vec<&[u8]>>();
         self.appender.compress_chunks(chunks)?;
         Ok(())
     }
@@ -553,24 +605,31 @@ impl LasZipAppender {
     ) -> PyResult<Self> {
         let data =
             Python::attach(|py| PyFileObject::new(py, dest).map(BufReadWritePyFileObject::new))?;
-        let vlr = laz::LazVlr::read_from(as_bytes(laz_vlr_record_data)?).map_err(into_py_err)?;
+        let vlr_data = BufferView::new(laz_vlr_record_data)?;
+        let vlr = laz::LazVlr::read_from(vlr_data.as_slice(laz_vlr_record_data.py()))
+            .map_err(into_py_err)?;
         let appender = laz::LasZipAppender::new(data, vlr, point_count).map_err(into_py_err)?;
         Ok(LasZipAppender { appender })
     }
 
     fn compress_many<'py>(&mut self, points: &Bound<'py, PyAny>) -> PyResult<()> {
-        let point_bytes = as_bytes(points)?;
+        let point_bytes = BufferView::new(points)?;
 
         self.appender
-            .compress_many(point_bytes)
+            .compress_many(point_bytes.as_slice(points.py()))
             .map_err(into_py_err)
     }
 
     pub fn compress_chunks<'py>(&mut self, chunks: &Bound<'py, PyList>) -> PyResult<()> {
-        let chunks = chunks
+        let py = chunks.py();
+        let views = chunks
             .iter()
-            .map(|chunk| as_bytes(&chunk))
-            .collect::<PyResult<Vec<&[u8]>>>()?;
+            .map(|chunk| BufferView::new(&chunk))
+            .collect::<PyResult<Vec<BufferView>>>()?;
+        let chunks = views
+            .iter()
+            .map(|view| view.as_slice(py))
+            .collect::<Vec<&[u8]>>();
         self.appender.compress_chunks(chunks)?;
         Ok(())
     }
