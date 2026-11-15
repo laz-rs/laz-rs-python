@@ -3,12 +3,12 @@ import os
 from pathlib import Path
 import shutil
 
-WHEEL_DIR = Path(os.environ.get("CARGO_TARGET_DIR", '.target')) / "wheels"
+WHEEL_DIR = Path(os.environ.get("CARGO_TARGET_DIR", 'target')) / "wheels"
 
 Path('dist').mkdir(exist_ok=True)
 
 
-@nox.session(python=['3.8', '3.9', '3.10', '3.11', '3.12'])
+@nox.session(python=['3.10', '3.11', '3.12', '3.13', '3.14', '3.14t', '3.15', '3.15t'])
 def build_wheel(session):
     session.install('maturin')
     session.run('cargo', 'clean', external=True)

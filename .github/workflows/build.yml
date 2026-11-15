@@ -8,7 +8,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-          python-version: [ '3.10', '3.11', '3.12', '3.13', '3.14', '3.14t' ]
+          python-version: [ '3.10', '3.11', '3.12', '3.13', '3.14', '3.14t', '3.15', '3.15t' ]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -34,7 +34,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [ '3.10', '3.11', '3.12', '3.13', '3.14', '3.14t' ]
+        python-version: [ '3.10', '3.11', '3.12', '3.13', '3.14', '3.14t', '3.15', '3.15t' ]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -62,7 +62,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [ '3.10', '3.11', '3.12', '3.13', '3.14', '3.14t' ]
+        python-version: [ '3.10', '3.11', '3.12', '3.13', '3.14', '3.14t', '3.15', '3.15t' ]
         arch: ['x86', 'x64']
 
     steps:
@@ -96,78 +96,36 @@ jobs:
 
 
   linux-build:
-    name: 'linux-build-${{ matrix.target }} (${{ matrix.python.version }})'
-    runs-on: ubuntu-latest
+    name: 'linux-build-${{ matrix.platform.target }} (${{ matrix.python-version }})'
+    # Each target is built natively, in the manylinux2014 image of its architecture
+    # (the aarch64 cross-compiling image lags behind on Python versions)
+    runs-on: ${{ matrix.platform.runner }}
     strategy:
       fail-fast: false
       matrix:
-        target: [x86_64, aarch64]
-        python: [
-          {
-            version: '3.9',
-            PYO3_CROSS_LIB_DIR: '/opt/python/cp39-cp39/lib'
-          },
-          {
-            version: '3.10',
-            PYO3_CROSS_LIB_DIR: '/opt/python/cp310-cp310/lib'
-          },
-          {
-            version: '3.11',
-            PYO3_CROSS_LIB_DIR: '/opt/python/cp311-cp311/lib'
-          },
-          {
-            version: '3.12',
-            PYO3_CROSS_LIB_DIR: '/opt/python/cp312-cp312/lib'
-          },
-          {
-            version: '3.13',
-            PYO3_CROSS_LIB_DIR: '/opt/python/cp313-cp313/lib'
-          },
-          {
-            version: '3.14',
-            PYO3_CROSS_LIB_DIR: '/opt/python/cp314-cp314/lib'
-          }
-        ]
-        # free-threaded 3.14 natively on x86_64 only: the aarch64 cross-compiling image has no python3.14t
-        include:
-          - target: x86_64
-            python: { version: '3.14t' }
+        platform:
+          - { target: x86_64, runner: ubuntu-latest }
+          - { target: aarch64, runner: ubuntu-24.04-arm }
+        python-version: [ '3.10', '3.11', '3.12', '3.13', '3.14', '3.14t', '3.15', '3.15t' ]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: ${{ matrix.python.version }}
+          python-version: ${{ matrix.python-version }}
 
       - name: Build wheels
-        if: matrix.target == 'x86_64'
         uses: messense/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
-          target: ${{ matrix.target }}
+          target: ${{ matrix.platform.target }}
           command: build
           manylinux: 2014
-          args: --release --out dist --interpreter python${{ matrix.python.version }}
-
-      - name: Build wheels
-        if: matrix.target == 'aarch64'
-        uses: messense/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
-        env:
-          PYO3_CROSS_LIB_DIR: '${{ matrix.python.PYO3_CROSS_LIB_DIR }}'
-        with:
-          # maturin >=1.12 parses the target's PEP 739 build-details.json, but the
-          # cp314 file in the manylinux images lacks the required abi.extension_suffix
-          # field. Pin below 1.12 so cross-compiling uses _sysconfigdata instead.
-          maturin-version: v1.11.5
-          target: ${{ matrix.target }}
-          command: build
-          manylinux: auto
-          args: --release --out dist --interpreter python${{ matrix.python.version }}
-
+          args: --release --out dist --interpreter python${{ matrix.python-version }}
 
       # Upload the wheels of the build for manual download/inspection
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: binary-linux-${{ matrix.target }}-${{ matrix.python.version }}
+          name: binary-linux-${{ matrix.platform.target }}-${{ matrix.python-version }}
           path: ./dist/*.whl
 
   # sdist is needed for the conda recipe
